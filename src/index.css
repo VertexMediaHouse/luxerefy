@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/* Soft workspace look: neutral greys (slate remapped to zinc), soft shadows, ink primary buttons, violet accent (blue remapped). */
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-brand: "Cinzel", Georgia, serif;
+  --color-navy: #0b2545;
+  --color-navy-2: #13315c;
+  --color-ink: #18181b;
+  --color-brass: #b8923f;
+  --color-canvas: #fafafa;
+
+  --color-slate-50: #fafafa;
+  --color-slate-100: #f4f4f5;
+  --color-slate-200: #e4e4e7;
+  --color-slate-300: #d4d4d8;
+  --color-slate-400: #a1a1aa;
+  --color-slate-500: #71717a;
+  --color-slate-600: #52525b;
+  --color-slate-700: #3f3f46;
+  --color-slate-800: #27272a;
+  --color-slate-900: #18181b;
+
+  --color-blue-50: #f4f1fe;
+  --color-blue-100: #ebe5fd;
+  --color-blue-200: #d8cdfb;
+  --color-blue-300: #bba8f8;
+  --color-blue-400: #9c7ff3;
+  --color-blue-500: #8160ee;
+  --color-blue-600: #6e47e6;
+  --color-blue-700: #5d38cc;
+  --color-blue-800: #4c2fa6;
+  --color-blue-900: #3f2a84;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.03), 0 2px 8px -2px rgb(0 0 0 / 0.06);
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.04), 0 8px 20px -6px rgb(0 0 0 / 0.1);
+  --shadow-pop: 0 16px 32px -12px rgb(0 0 0 / 0.18), 0 2px 6px -2px rgb(0 0 0 / 0.08);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-slate-800);
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+}
