@@ -12,7 +12,6 @@ import { PublicPropertyPage } from './features/properties/PublicPropertyPage'
 import { TicketsPage } from './features/tickets/TicketsPage'
 import { TeamPage } from './features/settings/TeamPage'
 import { BackupPage } from './features/settings/BackupPage'
-import { PipelinesPage } from './features/pipeline/PipelinesPage'
 import { PipelinePage } from './features/pipeline/PipelinePage'
 import { ContactsPage } from './features/contacts/ContactsPage'
 import { ContactDetailPage } from './features/contacts/ContactDetailPage'
@@ -43,7 +42,7 @@ export function App() {
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="tickets" element={<TicketsPage />} />
         <Route path="pipeline" element={<PipelinePage />} />
-        <Route path="pipelines" element={<PipelinesPage />} />
+        <Route path="pipelines" element={<Navigate to="/pipeline?setup=1" replace />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="backup" element={<BackupPage />} />
       </Route>

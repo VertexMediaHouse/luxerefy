@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { Building2, CalendarDays, CheckSquare, ChevronDown, Contact2, DatabaseBackup, FileText, KanbanSquare, LayoutDashboard, LifeBuoy, LogOut, Menu, Plus, RotateCcw, Search, SlidersHorizontal, Users, UserCog } from 'lucide-react'
+import { Building2, CalendarDays, CheckSquare, ChevronDown, Contact2, DatabaseBackup, FileText, KanbanSquare, LayoutDashboard, LifeBuoy, LogOut, Menu, Plus, RotateCcw, Search, Users, UserCog } from 'lucide-react'
 import { Reminders } from '../features/tasks/Reminders'
 import { useReminders } from '../features/tasks/api'
 import { useLeads } from '../features/leads/api'
@@ -28,7 +28,6 @@ const GROUPS: { group: string; items: Item[] }[] = [
     { to: '/documents', label: 'Documents', icon: FileText },
   ] },
   { group: 'Admin', items: [
-    { to: '/pipelines', label: 'Pipeline setup', icon: SlidersHorizontal },
     { to: '/team', label: 'Team & roles', icon: UserCog },
     { to: '/backup', label: 'Backups', icon: DatabaseBackup },
   ] },

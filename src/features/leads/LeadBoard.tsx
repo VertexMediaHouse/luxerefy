@@ -76,12 +76,15 @@ function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDr
  * Dragging a card onto a column writes the stage change; the detail page stepper remains
  * the keyboard route, since native HTML5 drag has no keyboard equivalent.
  */
-export function LeadBoard({ leads, pipelineId, limit, onAdd }: { leads: LeadRow[]; pipelineId?: string; limit?: number; onAdd?: () => void }) {
+export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages }: { leads: LeadRow[]; pipelineId?: string; limit?: number; onAdd?: () => void; visibleStages?: string[] }) {
   const [drag, setDrag] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const move = useMoveLead()
   const pid = pipelineId ?? defaultPipeline().id
-  const stages = stagesOf(pid)
+  const allStages = stagesOf(pid)
+  const stages = visibleStages && visibleStages.length > 0
+    ? allStages.filter(s => visibleStages.includes(s.id))
+    : allStages
 
   const drop = (e: DragEvent, status: LeadStatus, kind: string) => {
     e.preventDefault()

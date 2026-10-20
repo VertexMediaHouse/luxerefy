@@ -57,6 +57,43 @@ export function usePipelineActions() {
         }),
     }),
 
+    renamePipeline: useMutation({
+      mutationFn: ({ id, name }: { id: string; name: string }) =>
+        write(() => {
+          guard()
+          const v = clean(name, 'pipeline')
+          const p = db.pipelines.find(p => p.id === id)
+          if (!p) throw new Error('Pipeline not found')
+          if (db.pipelines.some(o => o.id !== id && o.name.toLowerCase() === v.toLowerCase())) throw new Error('A pipeline with that name already exists.')
+          p.name = v
+        }),
+    }),
+
+    deletePipeline: useMutation({
+      mutationFn: (id: string) =>
+        write(() => {
+          guard()
+          if (db.pipelines.length <= 1) throw new Error('You cannot delete the only remaining pipeline.')
+          const leadsInPipe = db.leads.filter(l => l.pipeline_id === id)
+          if (leadsInPipe.length > 0) throw new Error(`Cannot delete pipeline: it contains ${leadsInPipe.length} lead(s). Move or delete them first.`)
+          db.pipelines = db.pipelines.filter(p => p.id !== id)
+          db.stages = db.stages.filter(s => s.pipeline_id !== id)
+        }),
+    }),
+
+    deleteStage: useMutation({
+      mutationFn: (id: string) =>
+        write(() => {
+          guard()
+          const s = db.stages.find(s => s.id === id)
+          if (!s) throw new Error('Stage not found')
+          if (s.kind !== 'open') throw new Error('Cannot delete reserved stages (entry, Won, Lost).')
+          const leadsInStage = db.leads.filter(l => l.status === id)
+          if (leadsInStage.length > 0) throw new Error(`Cannot delete stage: ${leadsInStage.length} lead(s) currently in this stage. Move them first.`)
+          db.stages = db.stages.filter(stage => stage.id !== id)
+        }),
+    }),
+
     addStage: useMutation({
       mutationFn: ({ pipeline_id, label, tone }: { pipeline_id: string; label: string; tone: Tone }) =>
         write(() => {
