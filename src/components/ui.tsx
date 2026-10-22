@@ -7,40 +7,39 @@ import type { LeadStatus } from '../lib/types'
 import { initials } from '../lib/format'
 
 const BTN = {
-  primary: 'bg-ink text-white shadow-soft hover:bg-slate-700',
-  secondary: 'bg-white text-slate-700 shadow-soft ring-1 ring-slate-200/80 hover:bg-slate-50 hover:text-slate-900',
+  primary: 'bg-ink text-white hover:bg-slate-700',
+  secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900',
   ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-  danger: 'bg-white text-red-600 ring-1 ring-slate-200 hover:bg-red-50 hover:ring-red-200',
+  danger: 'bg-white text-red-600 border border-slate-200 hover:bg-red-50 hover:border-red-200',
 }
 export type ButtonVariant = keyof typeof BTN
 
 export const buttonCls = (v: ButtonVariant = 'primary') =>
-  `inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${BTN[v]}`
+  `inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${BTN[v]}`
 
 export function Button({ variant = 'primary', className = '', ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
   return <button type="button" {...p} className={`${buttonCls(variant)} ${className}`} />
 }
 
 /** White pill control for toolbars (filters, view switch, selects). */
-export const pillCls = 'inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-soft ring-1 ring-slate-200/80 hover:bg-slate-50'
+export const pillCls = 'inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50'
 
 const CARD = {
-  plain: 'bg-white ring-slate-200/70',
-  dark: 'bg-ink text-white ring-white/10',
-  tint: 'bg-blue-50 ring-blue-200/70',
+  plain: 'bg-white border-slate-200',
+  dark: 'bg-ink text-white border-slate-700',
+  tint: 'bg-blue-50/50 border-blue-200/70',
 }
 export type CardTone = keyof typeof CARD
 
-export function Card({ className = '', tone = 'plain', children }: { className?: string; tone?: CardTone; children: ReactNode }) {
-  return <div className={`min-w-0 rounded-2xl shadow-card ring-1 ${CARD[tone]} ${className}`}>{children}</div>
+export function Card({ className = '', tone = 'plain', children, id }: { className?: string; tone?: CardTone; children: ReactNode; id?: string }) {
+  return <div id={id} className={`min-w-0 rounded-xl border ${CARD[tone]} ${className}`}>{children}</div>
 }
 
-export function CardHeader({ title, subtitle, action, icon: Icon }: { title: string; subtitle?: ReactNode; action?: ReactNode; icon?: ComponentType<{ className?: string }> }) {
+export function CardHeader({ title, subtitle, action, icon: _Icon }: { title: string; subtitle?: ReactNode; action?: ReactNode; icon?: ComponentType<{ className?: string }> }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-slate-100 px-5 py-3.5">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-slate-100 px-5 py-3">
       <div className="flex min-w-0 items-center gap-2">
-        {Icon && <Icon className="size-4 shrink-0 text-slate-400" />}
-        <h2 className="shrink-0 text-sm font-medium text-slate-900">{title}</h2>
+        <h2 className="shrink-0 text-[13px] font-medium text-slate-900">{title}</h2>
         {subtitle && <span className="min-w-0 truncate text-xs text-slate-400">{subtitle}</span>}
       </div>
       {action}
@@ -206,7 +205,7 @@ export function AvatarStack({ names, max = 4 }: { names: string[]; max?: number 
 }
 
 export const inputCls =
-  'block w-full rounded-lg border-0 bg-white px-2.5 py-1.5 text-sm text-slate-900 shadow-soft ring-1 ring-slate-200/80 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:outline-none'
+  'block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none'
 /** Same look, natural width: toolbar filters and inline selects. */
 export const inlineInputCls = inputCls.replace('w-full', 'w-auto')
 
@@ -241,7 +240,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
       ref={ref}
       onClose={onClose}
       onClick={e => e.target === ref.current && onClose()}
-      className={`m-auto w-[calc(100%-2rem)] ${wide ? 'max-w-2xl' : 'max-w-lg'} rounded-2xl bg-white p-0 shadow-pop ring-1 ring-slate-200 backdrop:bg-black/25`}
+      className={`m-auto w-[calc(100%-2rem)] ${wide ? 'max-w-2xl' : 'max-w-lg'} rounded-xl bg-white p-0 shadow-pop border border-slate-200 backdrop:bg-black/40`}
     >
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
         <h2 className="text-base font-semibold text-slate-900">{title}</h2>
@@ -254,21 +253,20 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
   )
 }
 
-export function PageHeader({ title, subtitle, actions, back, icon: I, tint = 'text-slate-600', tag }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; back?: { to: string; label: string }; icon?: ComponentType<{ className?: string }>; tint?: string; tag?: ReactNode }) {
+export function PageHeader({ title, subtitle, actions, back, icon: _I, tint: _tint, tag }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; back?: { to: string; label: string }; icon?: ComponentType<{ className?: string }>; tint?: string; tag?: ReactNode }) {
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         {back && (
-          <Link to={back.to} className="mb-1.5 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900">
-            {back.label} <ChevronRight className="size-3.5" />
+          <Link to={back.to} className="mb-1 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-900">
+            <ChevronRight className="size-3.5 rotate-180" /> {back.label}
           </Link>
         )}
-        <div className="flex items-center gap-3">
-          {I && <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-card ring-1 ring-slate-200/70"><I className={`size-[18px] ${tint}`} /></span>}
-          <h1 className="truncate text-2xl leading-tight font-semibold tracking-tight text-slate-900">{title}</h1>
+        <div className="flex items-center gap-2.5">
+          <h1 className="truncate text-xl leading-tight font-semibold tracking-tight text-slate-900">{title}</h1>
           {tag}
         </div>
-        {subtitle && <p className="mt-1.5 text-sm text-slate-500">{subtitle}</p>}
+        {subtitle && <p className="mt-1 text-[13px] text-slate-500">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
@@ -296,8 +294,8 @@ export const T = {
 
 export function Empty({ icon: Icon, children }: { icon: ComponentType<{ className?: string }>; children: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2.5 px-6 py-12 text-center text-sm text-slate-500">
-      <span className="flex size-10 items-center justify-center rounded-xl bg-slate-100 text-slate-400"><Icon className="size-5" /></span>
+    <div className="flex flex-col items-center gap-2 px-6 py-10 text-center text-sm text-slate-400">
+      <Icon className="size-5" />
       {children}
     </div>
   )
@@ -318,15 +316,15 @@ export function ErrorText({ error }: { error: unknown }) {
 /** iOS-style segmented control: one pill slides between two or three equal choices. */
 export function Segmented<T extends string>({ value, onChange, items, label }: { value: T; onChange: (v: T) => void; items: { value: T; label: string; icon?: ComponentType<{ className?: string }> }[]; label: string }) {
   return (
-    <div className="inline-flex gap-0.5 rounded-xl bg-slate-100 p-0.5 ring-1 ring-slate-200/70" role="group" aria-label={label}>
+    <div className="inline-flex gap-0.5 rounded-lg bg-slate-100 p-0.5" role="group" aria-label={label}>
       {items.map(({ value: v, label: l, icon: I }) => (
         <button
           key={v}
           type="button"
           aria-pressed={value === v}
           onClick={() => onChange(v)}
-          className={`inline-flex items-center gap-1.5 rounded-[0.625rem] px-3 py-1.5 text-sm font-medium whitespace-nowrap transition ${
-            value === v ? 'bg-white text-slate-900 shadow-soft ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-800'
+          className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition ${
+            value === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           {I && <I className="size-4" />}{l}

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Button, ErrorText, Field, inputCls, Modal } from '../../components/ui'
 import { useUser } from '../../lib/session'
 import { TASK_KIND_LABEL, TIMED_KINDS } from '../../lib/labels'
+import { loadCustomTypes } from './TasksPage'
 import { toLocalInput } from '../../lib/format'
 import type { Task, TaskKind } from '../../lib/types'
 import { useLeads } from '../leads/api'
@@ -48,26 +49,29 @@ function TaskForm({ task, defaults, onDone }: { task: Task | null; defaults: Par
   const status = (st: Task['status']) => task && setStatus.mutate({ id: task.id, status: st }, { onSuccess: onDone })
 
   return (
-    <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
       <Field label="Title *" className="sm:col-span-2"><input name="title" required defaultValue={init.title} className={inputCls} placeholder="Site visit with family" /></Field>
       <Field label="Type">
         <select value={kind} onChange={e => setKind(e.target.value as TaskKind)} className={inputCls}>
           {Object.entries(TASK_KIND_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          {loadCustomTypes().map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
         </select>
       </Field>
-      <Field label={timed ? 'Starts' : 'Due'} hint={task ? 'Change this to reschedule — the lead timeline records the move' : undefined}>
+      <Field label={timed ? 'Starts' : 'Due'} hint={task ? 'Change to reschedule' : undefined}>
         <input name="due_at" type="datetime-local" required defaultValue={toLocalInput(start)} className={inputCls} />
       </Field>
-      <Field label={timed ? 'Ends *' : 'Ends (optional)'} hint={timed ? 'Blocks this slot; overlapping bookings are refused' : undefined}>
-        <input
-          key={String(timed)}
-          name="ends_at"
-          type="datetime-local"
-          required={timed}
-          defaultValue={init.ends_at ? toLocalInput(new Date(init.ends_at)) : timed ? toLocalInput(new Date(start.getTime() + 3600e3)) : ''}
-          className={inputCls}
-        />
-      </Field>
+      {timed && (
+        <Field label="Ends" hint="Blocks this slot on the calendar">
+          <input
+            key={String(timed)}
+            name="ends_at"
+            type="datetime-local"
+            required={timed}
+            defaultValue={init.ends_at ? toLocalInput(new Date(init.ends_at)) : toLocalInput(new Date(start.getTime() + 3600e3))}
+            className={inputCls}
+          />
+        </Field>
+      )}
       <Field label="Lead">
         <select name="lead_id" defaultValue={init.lead_id ?? ''} className={inputCls}>
           <option value="">None</option>

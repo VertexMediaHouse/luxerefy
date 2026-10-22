@@ -35,16 +35,14 @@
   --color-blue-800: #1e40af;
   --color-blue-900: #1b3691;
 
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.875rem;
-  --radius-2xl: 1.125rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
 
-  --shadow-card: 0 1px 2px rgb(16 32 64 / 0.04), 0 1px 3px rgb(16 32 64 / 0.03);
-  --shadow-soft: 0 1px 2px rgb(16 32 64 / 0.05);
-  --shadow-lift: 0 1px 2px rgb(16 32 64 / 0.05), 0 8px 20px -8px rgb(16 32 64 / 0.14);
-  --shadow-pop: 0 14px 34px -12px rgb(8 18 40 / 0.26), 0 2px 6px -2px rgb(8 18 40 / 0.1);
-  --shadow-window: 0 30px 70px -24px rgb(4 12 36 / 0.62), 0 6px 18px -8px rgb(4 12 36 / 0.4);
+  --shadow-soft: 0 1px 2px rgb(16 32 64 / 0.04);
+  --shadow-pop: 0 8px 24px -6px rgb(8 18 40 / 0.16), 0 2px 6px -2px rgb(8 18 40 / 0.06);
 }
+
+html { scroll-behavior: smooth; }
 
 body {
   background: var(--color-canvas);
@@ -67,6 +65,22 @@ html[data-eye="warm"]::after {
   background: #ff9b3d;
   opacity: 0.13;
   mix-blend-mode: multiply;
+}
+
+/* Notebook-style textarea: ruled lines behind the text, like writing in a book. */
+.notebook-lines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(1.75rem - 1px),
+    var(--color-slate-200) calc(1.75rem - 1px),
+    var(--color-slate-200) 1.75rem
+  );
+  background-size: 100% 1.75rem;
+  background-position: 0 0.5rem;
+  line-height: 1.75rem;
+  padding-top: 0.5rem;
+  font-family: "Georgia", serif;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -45,4 +45,4 @@ export const GOAL_PERIODS: GoalPeriod[] = ['weekly', 'monthly', 'yearly']
 export const GOAL_METRIC_LABEL: Record<GoalMetric, string> = { leads: 'New leads', won: 'Leads won', revenue: 'Revenue booked', site_visits: 'Site visits done' }
 export const GOAL_METRICS: GoalMetric[] = ['leads', 'won', 'revenue', 'site_visits']
 
-export const DOC_FOLDERS: DocFolder[] = ['Agreements', 'KYC', 'Property', 'Payments', 'Other']
+export const DOC_FOLDERS: DocFolder[] = ['Company Brochures', 'General Documents', 'Agreements', 'KYC', 'Other']

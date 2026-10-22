@@ -220,15 +220,15 @@ export function seed(): Tables {
 
   const doc = (id: string, name: string, folder: Tables['documents'][number]['folder'], kb: number, age: number, link: { lead?: string; property?: string }) =>
     t.documents.push({ id, name, folder, size: kb * 1024, mime: 'application/pdf', storage_path: '', lead_id: link.lead ?? null, property_id: link.property ?? null, uploaded_by: OWNER, created_at: at(-age) })
-  doc('d-1', 'Aurelia — Floor plans (14th & 15th).pdf', 'Property', 2400, 800, { property: properties[0].id })
-  doc('d-2', 'Aurelia Residences — Brochure.pdf', 'Property', 5800, 850, { property: properties[0].id })
-  doc('d-3', 'Ambli Crest — Price list Q4.pdf', 'Property', 310, 300, { property: properties[1].id })
+  doc('d-1', 'Aurelia — Floor plans (14th & 15th).pdf', 'Company Brochures', 2400, 800, { property: properties[0].id })
+  doc('d-2', 'Aurelia Residences — Brochure.pdf', 'Company Brochures', 5800, 850, { property: properties[0].id })
+  doc('d-3', 'Ambli Crest — Price list Q4.pdf', 'Company Brochures', 310, 300, { property: properties[1].id })
   doc('d-4', 'Sale Agreement — Isha Trivedi.pdf', 'Agreements', 1200, 300, { lead: 'l-7', property: properties[5].id })
   doc('d-5', 'KYC — Isha Trivedi (PAN, Aadhaar).pdf', 'KYC', 900, 400, { lead: 'l-7' })
-  doc('d-6', 'Booking receipt — ₹25 L.pdf', 'Payments', 150, 320, { lead: 'l-7' })
+  doc('d-6', 'Booking receipt — ₹25 L.pdf', 'General Documents', 150, 320, { lead: 'l-7' })
   doc('d-7', 'Allotment letter — Devansh Parikh.pdf', 'Agreements', 450, 200, { lead: 'l-12', property: properties[3].id })
-  doc('d-8', 'Title search report — Thaltej plot.pdf', 'Property', 3100, 450, { property: properties[2].id })
-  doc('d-9', 'Aranya Farms — NA title certificate.pdf', 'Property', 780, 120, { property: properties[7].id })
+  doc('d-8', 'Title search report — Thaltej plot.pdf', 'General Documents', 3100, 450, { property: properties[2].id })
+  doc('d-9', 'Aranya Farms — NA title certificate.pdf', 'General Documents', 780, 120, { property: properties[7].id })
 
   const ticket = (number: number, title: string, description: string, priority: TicketPriority, status: TicketStatus, age: number, link: { lead?: number; property?: number } = {}): Ticket => {
     const created = at(-age)

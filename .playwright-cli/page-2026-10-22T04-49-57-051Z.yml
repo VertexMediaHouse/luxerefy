@@ -1,0 +1,28 @@
+- generic [ref=e3]:
+  - generic [ref=e6]:
+    - generic [ref=e7]: Luxerefy
+    - paragraph [ref=e9]: Every enquiry captured. Every follow-up on time.
+    - paragraph [ref=e10]: Leads from 99acres, social media, your website and referrals land in one place — tracked and followed up.
+  - generic [ref=e12]:
+    - heading "Sign in to your CRM" [level=1] [ref=e13]
+    - paragraph [ref=e14]: Accounts are invite-only.
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]: Email
+        - textbox "Email" [active] [ref=e18]:
+          - /placeholder: you@luxerefy.com
+      - generic [ref=e19]:
+        - generic [ref=e20]: Password
+        - textbox "Password" [ref=e21]:
+          - /placeholder: ••••••••
+      - button "Sign in" [ref=e22]
+    - generic [ref=e23]:
+      - paragraph [ref=e24]: Or use the demo account
+      - list [ref=e25]:
+        - listitem [ref=e26]:
+          - button "Siddharth Udani Siddharth Udani Owner, siddharth@luxerefy.com" [ref=e27]:
+            - generic "Siddharth Udani" [ref=e28]:
+              - img "Siddharth Udani" [ref=e29]
+            - generic [ref=e30]:
+              - generic [ref=e31]: Siddharth Udani
+              - generic [ref=e32]: Owner, siddharth@luxerefy.com

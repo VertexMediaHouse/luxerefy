@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { Building2, CalendarDays, CheckSquare, ChevronDown, Contact2, DatabaseBackup, Eye, EyeOff, FileText, LayoutDashboard, LifeBuoy, LogOut, Menu, Search, Settings, Target, Users, UserCog } from 'lucide-react'
+import { Building2, CalendarDays, CheckSquare, Contact2, DatabaseBackup, Eye, EyeOff, FileText, LayoutDashboard, LifeBuoy, LogOut, Menu, Search, Settings, Target, Users, UserCog } from 'lucide-react'
 import { Reminders } from '../features/tasks/Reminders'
 import { useReminders } from '../features/tasks/api'
 import { useLeads } from '../features/leads/api'
@@ -39,9 +39,7 @@ const PAGE = Object.fromEntries([...MAIN, ...GROUPS.flatMap(g => g.items)].map(i
 export function Brand({ light }: { light?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
-      <span className="flex size-8 items-center justify-center rounded-[10px] bg-blue-600 font-brand text-base font-bold text-white">L</span>
-      <span className={`text-lg font-semibold tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}>Luxerefy</span>
-      <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${light ? 'bg-white/10 text-blue-200' : 'bg-blue-50 text-blue-700'}`}>CRM</span>
+      <span className={`text-lg font-brand tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}>Luxerefy</span>
     </div>
   )
 }
@@ -85,7 +83,6 @@ export function Layout() {
 
   const section = '/' + (pathname.split('/')[1] ?? '')
   const crumb = PAGE[section] ?? PAGE['/']
-  const CrumbIcon = crumb.icon
 
   const link = ({ to, label, icon: Icon, end, count }: Item) => (
     <NavLink
@@ -93,18 +90,16 @@ export function Layout() {
       to={to}
       end={end}
       onClick={() => setOpen(false)}
-      className={({ isActive }) => `group/link flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-colors ${
-        isActive ? 'bg-white/[0.09] font-medium text-white' : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-100'
+      className={({ isActive }) => `flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] transition-colors ${
+        isActive ? 'bg-white/[0.08] font-medium text-white' : 'text-slate-400 hover:text-slate-200'
       }`}
     >
       {({ isActive }) => (
         <>
-          <span className={`flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors ${isActive ? 'bg-blue-600 text-white' : 'bg-white/[0.06] text-slate-400 group-hover/link:text-slate-200'}`}>
-            <Icon className="size-[15px]" />
-          </span>
+          <Icon className={`size-4 shrink-0 ${isActive ? 'text-blue-400' : ''}`} />
           <span className="flex-1">{label}</span>
           {count && counts[count] > 0 && (
-            <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${count === 'tickets' ? 'bg-red-500/15 text-red-300' : 'bg-white/10 text-slate-300'}`}>{counts[count]}</span>
+            <span className={`text-[11px] font-medium tabular-nums ${count === 'tickets' ? 'text-red-400' : 'text-slate-500'}`}>{counts[count]}</span>
           )}
         </>
       )}
@@ -117,73 +112,61 @@ export function Layout() {
         {open && <div className="absolute inset-0 z-40 bg-slate-900/45 lg:hidden" onClick={() => setOpen(false)} />}
 
         <aside className={`absolute inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col bg-ink transition-transform lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="px-5 pt-5 pb-4"><Brand light /></div>
+          <div className="px-5 pt-6 pb-6"><Brand light /></div>
 
-          <div className="mx-3 mb-4 flex items-center gap-2.5 rounded-xl bg-white/[0.05] p-2.5 ring-1 ring-white/[0.06]">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">AU</span>
-            <span className="min-w-0 flex-1 leading-tight">
-              <span className="block text-[11px] text-slate-500">Workspace</span>
-              <span className="block truncate text-sm font-medium text-white">Ahmedabad Luxury</span>
-            </span>
-          </div>
-
-          <nav className="flex-1 space-y-4 overflow-y-auto px-3 pb-2" aria-label="Main">
-            <div className="space-y-1">{MAIN.map(link)}</div>
+          <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-2" aria-label="Main">
+            <div className="space-y-0.5">{MAIN.map(link)}</div>
             {GROUPS.map(({ group, items }) => (
-              <details key={group} open className="group/nav">
-                <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold tracking-wider text-slate-600 uppercase hover:text-slate-400 [&::-webkit-details-marker]:hidden">
-                  <ChevronDown className="size-3 -rotate-90 transition-transform group-open/nav:rotate-0" /> {group}
-                </summary>
-                <div className="mt-1 space-y-1">{items.map(link)}</div>
-              </details>
+              <div key={group}>
+                <p className="mb-1 px-3 text-[11px] font-medium tracking-wide text-slate-600 uppercase">{group}</p>
+                <div className="space-y-0.5">{items.map(link)}</div>
+              </div>
             ))}
           </nav>
 
-          <div className="mx-3 mb-3 rounded-xl bg-white/[0.05] p-2.5 ring-1 ring-white/[0.06]">
+          <div className="mx-3 mb-3 border-t border-white/[0.06] px-3 pt-3">
             <div className="flex items-center gap-2.5">
-              <Avatar name={user.full_name} size="md" />
+              <Avatar name={user.full_name} size="sm" />
               <div className="min-w-0 flex-1 leading-tight">
-                <div className="truncate text-sm font-medium text-white">{user.full_name}</div>
-                <div className="text-xs text-slate-500">{ROLE_LABEL[user.role]}</div>
+                <div className="truncate text-[13px] font-medium text-white">{user.full_name}</div>
+                <div className="text-[11px] text-slate-500">{ROLE_LABEL[user.role]}</div>
               </div>
-              <button type="button" onClick={signOut} className="rounded-md p-1.5 text-slate-500 hover:bg-white/10 hover:text-white" aria-label="Sign out" title="Sign out">
-                <LogOut className="size-4" />
+              <button type="button" onClick={signOut} className="rounded-md p-1.5 text-slate-500 hover:text-white" aria-label="Sign out" title="Sign out">
+                <LogOut className="size-3.5" />
               </button>
             </div>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200/70 px-4 sm:px-6 lg:px-7">
-            <button type="button" className="-ml-1 rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
+          <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/60 px-4 sm:px-6 lg:px-7">
+            <button type="button" className="-ml-1 rounded-lg p-1.5 text-slate-500 hover:text-slate-900 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
               <Menu className="size-5" />
             </button>
-            <nav aria-label="Breadcrumb" className="hidden items-center gap-2 text-sm sm:flex">
+            <nav aria-label="Breadcrumb" className="hidden items-center gap-1.5 text-sm sm:flex">
               <span className="text-slate-400">{GROUPS.find(g => g.items.includes(crumb))?.group ?? 'Workspace'}</span>
               <span className="text-slate-300">/</span>
-              <Link to={section} className="flex items-center gap-1.5 font-medium text-slate-900">
-                <CrumbIcon className="size-4 text-blue-600" /> {crumb.label}
-              </Link>
+              <Link to={section} className="font-medium text-slate-900">{crumb.label}</Link>
             </nav>
 
-            <form onSubmit={search} role="search" className="relative ml-auto w-full max-w-sm">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-              <input ref={searchRef} name="q" type="search" placeholder="Search leads by name, phone or property…" aria-label="Search leads (Ctrl+K)" className="block w-full rounded-xl border-0 bg-white py-2 pr-14 pl-9 text-sm text-slate-900 shadow-soft ring-1 ring-slate-200/80 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-              <kbd className="pointer-events-none absolute top-1/2 right-2 hidden -translate-y-1/2 rounded-md bg-slate-100 px-1.5 py-0.5 font-sans text-[11px] text-slate-500 sm:block">Ctrl K</kbd>
+            <form onSubmit={search} role="search" className="relative ml-auto w-full max-w-xs">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-slate-400" />
+              <input ref={searchRef} name="q" type="search" placeholder="Search leads…" aria-label="Search leads (Ctrl+K)" className="block w-full rounded-lg border-0 bg-slate-100 py-1.5 pr-14 pl-8 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+              <kbd className="pointer-events-none absolute top-1/2 right-2 hidden -translate-y-1/2 rounded bg-slate-200/70 px-1.5 py-0.5 font-sans text-[11px] text-slate-400 sm:block">⌘K</kbd>
             </form>
             <Reminders />
             <button
               type="button"
               onClick={toggleEyeSafe}
               aria-pressed={warm}
-              className={`rounded-lg p-2 transition-colors ${warm ? 'bg-ink text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
+              className={`rounded-lg p-1.5 transition-colors ${warm ? 'bg-ink text-white' : 'text-slate-400 hover:text-slate-900'}`}
               aria-label={warm ? 'Turn off eye-safety mode' : 'Turn on eye-safety mode'}
               title={warm ? 'Eye-safety mode is on' : 'Eye-safety mode'}
             >
-              {warm ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
+              {warm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
-            <Link to="/settings" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900" aria-label="Settings" title="Settings">
-              <Settings className="size-[18px]" />
+            <Link to="/settings" className="rounded-lg p-1.5 text-slate-400 hover:text-slate-900" aria-label="Settings" title="Settings">
+              <Settings className="size-4" />
             </Link>
           </header>
 

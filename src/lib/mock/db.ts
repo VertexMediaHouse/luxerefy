@@ -3,7 +3,7 @@ import type { Tables } from '../types'
 import { escalateTickets } from '../rules'
 import { seed } from './seed'
 
-export const KEY = 'luxerefy-crm-mock-v4'
+export const KEY = 'luxerefy-crm-mock-v5'
 
 function load(): Tables {
   try {

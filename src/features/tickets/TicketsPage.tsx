@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { AlertTriangle, CircleDot, LifeBuoy, Plus, Timer } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Headphones, LifeBuoy, Plus, Timer } from 'lucide-react'
 import { Badge, Button, Card, Empty, ErrorText, Field, inputCls, Loading, Modal, PageHeader, RecordCount, T, Tabs, Toolbar } from '../../components/ui'
 import { SLA_HOURS } from '../../lib/rules'
 import { PRIORITY_LABEL, PRIORITY_TONE, TICKET_STATUS_LABEL, TICKET_STATUS_TONE } from '../../lib/labels'
@@ -24,6 +24,7 @@ export function Sla({ t }: { t: TicketRow }) {
   )
 }
 
+
 export function TicketsPage() {
   const { data } = useTickets()
   const [tab, setTab] = useState<TicketStatus | 'all'>('all')
@@ -41,6 +42,7 @@ export function TicketsPage() {
         subtitle="Raise an issue and it goes straight to the team, with an SLA clock on it"
         actions={<Button onClick={() => setRaising(true)}><Plus className="size-4" /> Raise ticket</Button>}
       />
+
       <Card>
         <Toolbar>
           <Tabs value={tab} onChange={setTab} items={[
@@ -87,11 +89,11 @@ export function TicketsPage() {
 function TicketDetail({ t }: { t: TicketRow }) {
   const update = useUpdateTicket()
   const steps = [
-    { at: t.created_at, label: `Raised by ${t.raised_by_name}` },
-    t.in_progress_at && { at: t.in_progress_at, label: 'Work started' },
-    t.escalated_at && { at: t.escalated_at, label: `Escalated to level ${t.escalation_level} (SLA breached)` },
-    t.resolved_at && { at: t.resolved_at, label: 'Resolved' },
-  ].filter(s => !!s).sort((a, b) => a.at.localeCompare(b.at))
+    { at: t.created_at, label: `Raised by ${t.raised_by_name}`, icon: Plus, done: true },
+    { at: t.in_progress_at, label: 'Work started', icon: Headphones, done: !!t.in_progress_at },
+    { at: t.escalated_at, label: `Escalated to level ${t.escalation_level}`, icon: AlertTriangle, done: !!t.escalated_at },
+    { at: t.resolved_at, label: 'Resolved', icon: CheckCircle2, done: !!t.resolved_at },
+  ].filter(s => s.done || s.icon === Headphones || s.icon === CheckCircle2)
 
   return (
     <div className="space-y-5">
@@ -106,14 +108,24 @@ function TicketDetail({ t }: { t: TicketRow }) {
         {t.property_id && <div><dt className="text-xs text-slate-500">Property</dt><dd><Link to={`/properties/${t.property_id}`} className="font-semibold text-blue-700 hover:underline">{t.property_title}</Link></dd></div>}
         <div><dt className="text-xs text-slate-500">SLA due</dt><dd className="font-semibold">{dateTime(t.sla_due_at)}</dd></div>
       </dl>
-      <ol className="space-y-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-900/[0.05]">
-        {steps.map(s => (
-          <li key={s.label} className="flex items-start gap-2.5 text-sm">
-            <CircleDot className="mt-0.5 size-4 shrink-0 text-blue-600" />
-            <span><span className="font-semibold text-slate-800">{s.label}</span><span className="block text-xs text-slate-500">{dateTime(s.at)}</span></span>
+
+      <ol className="relative space-y-0 rounded-lg bg-slate-50 p-4">
+        {steps.map((s, i) => (
+          <li key={s.label} className="relative flex gap-3 pb-4 last:pb-0">
+            {i < steps.length - 1 && (
+              <span className={`absolute left-[11px] top-6 h-[calc(100%-12px)] w-0.5 ${s.done ? 'bg-blue-600' : 'bg-slate-200'}`} />
+            )}
+            <span className={`relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full ${s.done ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+              <s.icon className="size-3.5" />
+            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <span className={`block text-sm font-semibold ${s.done ? 'text-slate-900' : 'text-slate-400'}`}>{s.label}</span>
+              {s.done && s.at && <span className="block text-xs text-slate-500">{dateTime(s.at)}</span>}
+            </div>
           </li>
         ))}
       </ol>
+
       <div className="flex flex-wrap items-center justify-end gap-2">
         <ErrorText error={update.error} />
         {t.status === 'pending' && <Button variant="secondary" onClick={() => update.mutate({ id: t.id, status: 'in_progress' })}>Start work</Button>}

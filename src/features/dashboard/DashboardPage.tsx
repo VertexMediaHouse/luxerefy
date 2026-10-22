@@ -43,9 +43,9 @@ function Kpi({ to, label, value, icon: I, foot, chart, control, dark }: { to?: s
       <div className={`mt-3 text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{foot}</div>
     </>
   )
-  const cls = `rounded-2xl p-4 shadow-card ring-1 transition sm:p-5 ${dark ? 'bg-ink ring-white/10' : 'bg-white ring-slate-200/70'}`
+  const cls = `rounded-xl border p-4 transition sm:p-5 ${dark ? 'bg-ink border-slate-700' : 'bg-white border-slate-200'}`
   return to && !control
-    ? <Link to={to} className={`group ${cls} hover:shadow-lift`}>{body}</Link>
+    ? <Link to={to} className={`group ${cls} hover:bg-slate-50`}>{body}</Link>
     : <div className={cls}>{body}</div>
 }
 
@@ -54,10 +54,10 @@ function Delta({ now, prev, dark }: { now: number; prev: number; dark?: boolean 
   const up = diff >= 0
   const Arrow = up ? ArrowUpRight : ArrowDownRight
   const skin = dark
-    ? (up ? 'bg-emerald-400/15 text-emerald-300' : 'bg-red-400/15 text-red-300')
-    : (up ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700')
+    ? (up ? 'text-emerald-400' : 'text-red-400')
+    : (up ? 'text-emerald-600' : 'text-red-600')
   return (
-    <span className={`mr-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-semibold ${skin}`}>
+    <span className={`mr-1.5 inline-flex items-center gap-0.5 text-xs font-semibold ${skin}`}>
       <Arrow className="size-3" />{up ? '+' : ''}{diff}
     </span>
   )
@@ -85,7 +85,7 @@ function InflowChart({ data }: { data: { day: string; count: number }[] }) {
         <span className="text-2xl font-semibold tracking-tight text-slate-900">{total}</span>
         <span className="text-sm text-slate-500">new leads in the last 30 days</span>
       </div>
-      <div className="flex gap-2 pr-5 pl-3">
+      <div className="flex gap-2 px-5">
         <div className="flex h-[200px] flex-col justify-between pb-0 text-right text-[11px] text-slate-400">
           {[top, top / 2, 0].map(v => <span key={v} className="-my-1.5 w-5">{v}</span>)}
         </div>
@@ -200,10 +200,37 @@ export function DashboardPage() {
         />
       </div>
 
-      <div className="mt-4 grid items-start gap-4 xl:grid-cols-3">
-        <Card className="pb-4 xl:col-span-2">
-          <CardHeader icon={TrendingUp} title="Lead inflow" subtitle={`New enquiries per day, ${cutLabel.toLowerCase()}`} action={<HeaderLink to="/leads">All leads</HeaderLink>} />
-          <div className="pt-5"><InflowChart data={lead.daily} /></div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2 flex flex-col">
+          <CardHeader
+            icon={Building2}
+            title="Active properties by area"
+            subtitle={`${stock.total} ${SEGMENT_LABEL[segment].toLowerCase()}, available or reserved`}
+            action={<div className="flex items-center gap-2">
+              <Segmented label="Segment" value={segment} onChange={setSegment} items={SEGMENTS.map(s => ({ value: s, label: SEGMENT_LABEL[s] }))} />
+              <HeaderLink to="/properties">All properties</HeaderLink>
+            </div>}
+          />
+          {stock.areas.length ? (
+            <div className="grid gap-x-6 gap-y-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
+              {stock.areas.map(a => (
+                <div key={a.locality} className="rounded-lg bg-slate-50 p-3.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="min-w-0 truncate text-sm font-semibold text-slate-900">{a.locality}</h3>
+                    <span className="shrink-0 text-sm font-semibold text-slate-900 tabular-nums">{a.total}</span>
+                  </div>
+                  <ul className="mt-2 space-y-1">
+                    {a.byCategory.map(c => (
+                      <li key={c.category} className="flex items-baseline justify-between gap-2 text-xs">
+                        <span className="min-w-0 truncate text-slate-600">{CATEGORY_LABEL[c.category]}</span>
+                        <span className="shrink-0 font-medium text-slate-800 tabular-nums">{c.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : <Empty icon={Building2}>No active {SEGMENT_LABEL[segment].toLowerCase()} stock.</Empty>}
         </Card>
 
         <Card className="flex flex-col">
@@ -229,7 +256,7 @@ export function DashboardPage() {
                 return (
                   <li key={t.id}>
                     <Link to={t.lead_id ? `/leads/${t.lead_id}` : '/tasks'} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
-                      <span className={`flex w-11 shrink-0 flex-col items-center rounded-lg py-1 ring-1 ${isOverdue(t) ? 'bg-red-50 text-red-700 ring-red-600/15' : isToday ? 'bg-slate-900 text-white ring-slate-900' : 'bg-slate-50 text-slate-700 ring-slate-900/[0.06]'}`}>
+                      <span className={`flex w-11 shrink-0 flex-col items-center rounded-md py-1 ${isOverdue(t) ? 'bg-red-50 text-red-700' : isToday ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
                         <span className="text-[10px] font-medium">{due.toLocaleDateString('en-IN', { month: 'short' })}</span>
                         <span className="text-base leading-5 font-semibold">{due.getDate()}</span>
                       </span>
@@ -251,39 +278,12 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      <Card className="mt-4">
-        <CardHeader
-          icon={Building2}
-          title="Active properties by area"
-          subtitle={`${stock.total} ${SEGMENT_LABEL[segment].toLowerCase()}, available or reserved`}
-          action={<div className="flex items-center gap-2">
-            <Segmented label="Segment" value={segment} onChange={setSegment} items={SEGMENTS.map(s => ({ value: s, label: SEGMENT_LABEL[s] }))} />
-            <HeaderLink to="/properties">All properties</HeaderLink>
-          </div>}
-        />
-        {stock.areas.length ? (
-          <div className="grid gap-x-6 gap-y-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
-            {stock.areas.map(a => (
-              <div key={a.locality} className="rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200/60">
-                <div className="flex items-baseline justify-between gap-2">
-                  <h3 className="min-w-0 truncate text-sm font-semibold text-slate-900">{a.locality}</h3>
-                  <span className="shrink-0 text-sm font-semibold text-slate-900 tabular-nums">{a.total}</span>
-                </div>
-                <ul className="mt-2 space-y-1">
-                  {a.byCategory.map(c => (
-                    <li key={c.category} className="flex items-baseline justify-between gap-2 text-xs">
-                      <span className="min-w-0 truncate text-slate-600">{CATEGORY_LABEL[c.category]}</span>
-                      <span className="shrink-0 font-medium text-slate-800 tabular-nums">{c.count}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        ) : <Empty icon={Building2}>No active {SEGMENT_LABEL[segment].toLowerCase()} stock.</Empty>}
+      <Card className="mt-4 pb-4">
+        <CardHeader icon={TrendingUp} title="Lead inflow" subtitle={`New enquiries per day, ${cutLabel.toLowerCase()}`} action={<HeaderLink to="/leads">All leads</HeaderLink>} />
+        <div className="pt-5"><InflowChart data={lead.daily} /></div>
       </Card>
 
-      <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card tone="tint" className="flex flex-col">
           <CardHeader icon={Target} title="Goals" subtitle={`Monthly and yearly, ${(d.conversion * 100).toFixed(1)}% conversion so far`} action={<HeaderLink to="/goals">Manage</HeaderLink>} />
           {monthly.length || yearly.length ? (

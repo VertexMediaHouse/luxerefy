@@ -75,7 +75,7 @@ export interface Goal {
   created_at: string; updated_at: string
 }
 
-export type DocFolder = 'Agreements' | 'KYC' | 'Property' | 'Payments' | 'Other'
+export type DocFolder = 'Company Brochures' | 'General Documents' | 'Agreements' | 'KYC' | 'Other'
 
 export interface Doc {
   id: string; lead_id: string | null; property_id: string | null; folder: DocFolder; name: string

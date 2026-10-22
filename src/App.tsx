@@ -9,6 +9,7 @@ import { LeadDetailPage } from './features/leads/LeadDetailPage'
 import { PropertiesPage } from './features/properties/PropertiesPage'
 import { PropertyFormPage } from './features/properties/PropertyFormPage'
 import { PublicPropertyPage } from './features/properties/PublicPropertyPage'
+import { SalesFormPage } from './features/leads/SalesFormPage'
 import { TicketsPage } from './features/tickets/TicketsPage'
 import { TeamPage } from './features/settings/TeamPage'
 import { BackupPage } from './features/settings/BackupPage'
@@ -29,6 +30,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/p/:slug" element={<PublicPropertyPage />} />
+      <Route path="/sales-form" element={<SalesFormPage />} />
       <Route element={<RequireAuth><Layout /></RequireAuth>}>
         <Route index element={<DashboardPage />} />
         <Route path="leads" element={<LeadsPage />} />

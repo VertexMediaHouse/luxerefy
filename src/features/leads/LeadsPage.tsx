@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { Columns, KanbanSquare, List, Plus, SlidersHorizontal, Upload, Users, X, Zap } from 'lucide-react'
+import { Columns, Download, ExternalLink, KanbanSquare, List, Plus, SlidersHorizontal, Upload, Users, X, Zap } from 'lucide-react'
 import { Avatar, Button, StageChip, Card, Empty, inlineInputCls, Loading, PageHeader, RecordCount, SearchBox, Segmented, T, Tabs } from '../../components/ui'
 import { isOpen } from '../../lib/rules'
 import { SOURCE_LABEL } from '../../lib/labels'
@@ -14,8 +14,28 @@ import { ImportLeadsModal } from './ImportModal'
 import { useProperties } from '../properties/api'
 import { usePipelines } from '../pipeline/api'
 import { PipelineSetupModal, type SavedKanbanView } from '../pipeline/PipelineSetupModal'
+import { SOURCE_LABEL as SRC_LABELS } from '../../lib/labels'
+import { budget as fmtBudget } from '../../lib/format'
+import { stageLabel } from '../../lib/stages'
 
 const VIEWS_STORAGE_KEY = 'luxerefy-custom-kanban-views'
+
+async function exportLeads(leads: ReturnType<typeof useLeads>['data']) {
+  if (!leads?.length) return
+  const XLSX = await import('xlsx')
+  const data = leads.map(l => ({
+    Name: l.contact.name, Phone: l.contact.phone, Email: l.contact.email ?? '',
+    Source: SRC_LABELS[l.source], Stage: stageLabel(l.status),
+    Properties: l.properties.map(p => p.title).join(', '),
+    Budget: fmtBudget(l.budget_min, l.budget_max), City: l.city ?? '',
+    Notes: l.notes, 'Referral detail': l.referral_detail ?? '',
+  }))
+  const ws = XLSX.utils.json_to_sheet(data)
+  ws['!cols'] = Object.keys(data[0]).map(() => ({ wch: 18 }))
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Leads')
+  XLSX.writeFile(wb, `luxerefy-leads-${new Date().toISOString().slice(0, 10)}.xlsx`)
+}
 
 /**
  * Leads is the whole module now: the list and the board are two views of the same records,
@@ -75,8 +95,10 @@ export function LeadsPage() {
         tag={<span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">{view === 'board' ? `${base.filter(isOpen).length} open` : `${leads.length} total`}</span>}
         subtitle="Every enquiry, as a list or a board. Drag a card between stages to move the lead along."
         actions={<>
+          <Button variant="secondary" onClick={() => { const u = `${location.origin}/sales-form`; navigator.clipboard.writeText(u).then(() => alert(`Link copied:\n${u}`)) }}><ExternalLink className="size-4 text-slate-500" /> Share form</Button>
           <Button variant="secondary" onClick={() => setSetupOpen(true)}><SlidersHorizontal className="size-4 text-slate-500" /> Customise pipeline</Button>
           <Button variant="secondary" onClick={() => setModal('import')}><Upload className="size-4 text-slate-500" /> Import</Button>
+          <Button variant="secondary" onClick={() => void exportLeads(leads)}><Download className="size-4 text-slate-500" /> Export</Button>
           <Button variant="secondary" onClick={() => setModal('webhook')}><Zap className="size-4 text-slate-500" /> Simulate webhook</Button>
           <Button onClick={() => setModal('new')}><Plus className="size-4" /> New lead</Button>
         </>}

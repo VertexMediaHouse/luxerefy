@@ -52,7 +52,7 @@ export function LeadDetailPage() {
         </>}
       />
 
-      <div className="mb-4 rounded-2xl bg-slate-100 p-1.5 ring-1 ring-slate-200/70">
+      <div className="mb-4 rounded-lg bg-slate-100 p-1.5">
         <ol className="flex items-center gap-1 overflow-x-auto" aria-label="Stage">
           {stages.map((s, i) => {
             const cur = stages.findIndex(o => o.id === lead.status)
@@ -65,8 +65,8 @@ export function LeadDetailPage() {
                   disabled={actions.setStatus.isPending}
                   aria-pressed={active}
                   onClick={() => (s.kind === 'lost' ? setMode('lost') : actions.setStatus.mutate({ status: s.id }))}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition ${
-                    active ? 'bg-white font-medium text-slate-900 shadow-card ring-1 ring-slate-200'
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition ${
+                    active ? 'bg-white font-medium text-slate-900 shadow-sm'
                     : done ? 'text-slate-700 hover:bg-white/70' : 'text-slate-400 hover:bg-white/70 hover:text-slate-700'}`}
                 >
                   <StageIcon status={done ? wonOf(lead.pipeline_id) : s.id} className={`size-4 ${active || done ? '' : 'opacity-50'}`} />
@@ -268,8 +268,8 @@ function NotesPanel({ value, onSave, pending, saved }: { value: string; onSave: 
         <textarea
           value={draft}
           onChange={e => setDraft(e.target.value)}
-          rows={5}
-          className={inputCls}
+          rows={6}
+          className={`${inputCls} notebook-lines`}
           aria-label="Lead notes"
           placeholder="Decision maker, budget constraints, who else is involved, what they actually want…"
         />

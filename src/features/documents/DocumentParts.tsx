@@ -69,7 +69,7 @@ function UploadForm({ onDone, leadId, propertyId }: { onDone: () => void; leadId
         <input name="file" type="file" required accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.zip" className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100" />
       </Field>
       <Field label="Folder">
-        <select name="folder" defaultValue={leadId ? 'Agreements' : 'Property'} className={inputCls}>
+        <select name="folder" defaultValue={leadId ? 'Agreements' : 'Company Brochures'} className={inputCls}>
           {DOC_FOLDERS.map(f => <option key={f}>{f}</option>)}
         </select>
       </Field>

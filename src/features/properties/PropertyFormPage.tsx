@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Building2, ExternalLink, Trash2 } from 'lucide-react'
+import { AirVent, Bath, Building2, Car, Dumbbell, ExternalLink, Fence, Flower2, Gamepad2, Heart, Heater, Key, Leaf, Lightbulb, Lock, ParkingCircle, ShieldCheck, Sparkles, Trash2, TreePine, Umbrella, UtensilsCrossed, Waves, Wifi, Wind, Zap } from 'lucide-react'
 import { Button, buttonCls, Card, CardHeader, Empty, ErrorText, Field, inputCls, Loading, PageHeader } from '../../components/ui'
 import { useUser } from '../../lib/session'
 import { isManager } from '../../lib/rules'
@@ -21,6 +21,74 @@ export function PropertyFormPage() {
 
 const lines = (s: string) => s.split('\n').map(l => l.trim()).filter(Boolean)
 
+const AMENITIES = [
+  { key: 'Swimming pool', icon: Waves },
+  { key: 'Gym', icon: Dumbbell },
+  { key: 'Clubhouse', icon: UtensilsCrossed },
+  { key: 'Garden', icon: Flower2 },
+  { key: 'Parking', icon: ParkingCircle },
+  { key: 'Security', icon: ShieldCheck },
+  { key: 'CCTV', icon: Lock },
+  { key: 'Power backup', icon: Zap },
+  { key: 'Lift', icon: Building2 },
+  { key: 'Home automation', icon: Lightbulb },
+  { key: 'Wi-Fi', icon: Wifi },
+  { key: 'Air conditioning', icon: AirVent },
+  { key: 'Modular kitchen', icon: UtensilsCrossed },
+  { key: 'Servant room', icon: Key },
+  { key: 'Private pool', icon: Waves },
+  { key: 'Terrace', icon: Umbrella },
+  { key: 'Landscaping', icon: TreePine },
+  { key: 'Jogging track', icon: Heart },
+  { key: 'Kids play area', icon: Gamepad2 },
+  { key: 'Rain water harvesting', icon: Leaf },
+  { key: 'Car wash', icon: Car },
+  { key: 'Spa', icon: Sparkles },
+  { key: 'Jacuzzi', icon: Bath },
+  { key: 'Covered parking', icon: Car },
+  { key: 'Fence', icon: Fence },
+  { key: 'Geyser', icon: Heater },
+  { key: 'Cross ventilation', icon: Wind },
+] as const
+
+function AmenityPicker({ initial }: { initial: string[] }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(initial))
+  const [custom, setCustom] = useState('')
+  const toggle = (k: string) => setSelected(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
+  const addCustom = () => { if (custom.trim()) { setSelected(s => new Set(s).add(custom.trim())); setCustom('') } }
+  return (
+    <Field label="Amenities" hint={`${selected.size} selected — tap to toggle`}>
+      <input type="hidden" name="amenities" value={[...selected].join(', ')} />
+      <div className="flex flex-wrap gap-1.5 rounded-lg bg-white p-2 shadow-soft ring-1 ring-slate-200/80">
+        {AMENITIES.map(({ key, icon: I }) => (
+          <button key={key} type="button" onClick={() => toggle(key)} className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${selected.has(key) ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+            <I className="size-3.5" /> {key}
+          </button>
+        ))}
+        {[...selected].filter(s => !AMENITIES.some(a => a.key === s)).map(s => (
+          <button key={s} type="button" onClick={() => toggle(s)} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white">
+            {s}
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <input value={custom} onChange={e => setCustom(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustom())} className={inputCls} placeholder="Add custom amenity" />
+        <Button variant="secondary" type="button" onClick={addCustom}>Add</Button>
+      </div>
+    </Field>
+  )
+}
+
+// ponytail: data URLs in localStorage, cap ~2MB per image. Real storage when Supabase is connected.
+function readFiles(files: FileList): Promise<string[]> {
+  return Promise.all(Array.from(files).map(f => new Promise<string>((res, rej) => {
+    const r = new FileReader()
+    r.onload = () => res(r.result as string)
+    r.onerror = rej
+    r.readAsDataURL(f)
+  })))
+}
+
 function PropertyForm({ initial }: { initial: Property | null }) {
   const user = useUser()
   const nav = useNavigate()
@@ -28,6 +96,11 @@ function PropertyForm({ initial }: { initial: Property | null }) {
   const del = useDeleteProperty()
   const [images, setImages] = useState(initial?.images.join('\n') ?? '')
   const [price, setPrice] = useState(initial ? String(initial.price / 1e7) : '')
+  const handleFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    const urls = await readFiles(files)
+    setImages(prev => [prev, ...urls].filter(Boolean).join('\n'))
+  }
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -94,7 +167,7 @@ function PropertyForm({ initial }: { initial: Property | null }) {
             <CardHeader title="Description & amenities" />
             <div className="space-y-4 p-5">
               <Field label="Description"><textarea name="description" rows={4} defaultValue={initial?.description} className={inputCls} /></Field>
-              <Field label="Amenities" hint="Comma separated"><textarea name="amenities" rows={2} defaultValue={initial?.amenities.join(', ')} className={inputCls} placeholder="Private pool, Clubhouse, Home automation" /></Field>
+              <AmenityPicker initial={initial?.amenities ?? []} />
               <Field label="Specifications" hint="One per line, as Label: value">
                 <textarea name="specs" rows={5} defaultValue={Object.entries(initial?.specs ?? {}).map(([k, v]) => `${k}: ${v}`).join('\n')} className={`${inputCls} font-mono text-xs`} placeholder={'Possession: Ready to move\nFacing: East'} />
               </Field>
@@ -126,11 +199,21 @@ function PropertyForm({ initial }: { initial: Property | null }) {
           <Card>
             <CardHeader title="Images" />
             <div className="space-y-3 p-5">
-              <Field label="Image URLs" hint="One per line; the first is the cover. Uploads go to Supabase Storage once connected.">
-                <textarea value={images} onChange={e => setImages(e.target.value)} rows={4} className={`${inputCls} font-mono text-xs`} />
+              <Field label="Upload images" hint="Select files or paste URLs below. First image is the cover.">
+                <input type="file" accept="image/*" multiple onChange={e => handleFiles(e.target.files)} className={`${inputCls} py-1.5 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-medium file:text-blue-700`} />
+              </Field>
+              <Field label="Image URLs" hint="One per line; uploads appear as data URLs.">
+                <textarea value={images} onChange={e => setImages(e.target.value)} rows={3} className={`${inputCls} font-mono text-xs`} />
               </Field>
               <div className="grid grid-cols-3 gap-2">
-                {lines(images).map((src, i) => <img key={src + i} src={src} alt="" className={`aspect-square w-full rounded-lg object-cover ring-1 ring-slate-200 ${i === 0 ? 'col-span-3 aspect-video' : ''}`} />)}
+                {lines(images).map((src, i) => (
+                  <div key={src.slice(0, 60) + i} className="group relative">
+                    <img src={src} alt="" className={`aspect-square w-full rounded-lg object-cover ring-1 ring-slate-200 ${i === 0 ? 'col-span-3 aspect-video' : ''}`} />
+                    <button type="button" onClick={() => setImages(prev => lines(prev).filter((_, j) => j !== i).join('\n'))} className="absolute top-1 right-1 hidden rounded-full bg-red-600 p-1 text-white shadow group-hover:block" aria-label="Remove image">
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
           </Card>

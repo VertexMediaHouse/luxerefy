@@ -1,24 +1,52 @@
+import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { ChevronRight, DatabaseBackup, Eye, RotateCcw, Settings, UserCog } from 'lucide-react'
-import { Button, Card, CardHeader, PageHeader } from '../../components/ui'
+import { Check, ChevronRight, DatabaseBackup, Eye, RotateCcw, Settings, UserCog } from 'lucide-react'
+import { Button, Card, CardHeader, Field, inputCls, PageHeader } from '../../components/ui'
 import { useUser } from '../../lib/session'
 import { toggleEyeSafe, useEyeSafe } from '../../lib/eyeSafe'
-import { resetDemo } from '../../lib/mock/db'
+import { db, resetDemo, save } from '../../lib/mock/db'
 
 const LINKS = [
   { to: '/backup', icon: DatabaseBackup, label: 'Backups', hint: 'Weekly snapshots, download and restore' },
-  { to: '/team', icon: UserCog, label: 'Team and roles', hint: 'One desk for now; add people here later' },
+  { to: '/team', icon: UserCog, label: 'Team and roles', hint: 'Manage teams and module access' },
 ]
 
 export function SettingsPage() {
   const user = useUser()
   const warm = useEyeSafe()
+  const [name, setName] = useState(user.full_name)
+  const [email, setEmail] = useState(user.email)
+  const [phone, setPhone] = useState(user.phone)
+  const [saved, setSaved] = useState(false)
+
+  const saveProfile = (e: FormEvent) => {
+    e.preventDefault()
+    const p = db.profiles.find(p => p.id === user.id)
+    if (p) {
+      p.full_name = name.trim() || p.full_name
+      p.email = email.trim() || p.email
+      p.phone = phone.trim() || p.phone
+      save()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
+  }
 
   return (
     <>
-      <PageHeader icon={Settings} title="Settings" subtitle="How the CRM looks and behaves in this browser" />
+      <PageHeader icon={Settings} title="Settings" subtitle="Profile, appearance and data — everything in one place" />
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Profile" subtitle="Your details across the CRM" />
+          <form onSubmit={saveProfile} className="space-y-4 p-5">
+            <Field label="Full name"><input value={name} onChange={e => setName(e.target.value)} className={inputCls} /></Field>
+            <Field label="Email"><input value={email} onChange={e => setEmail(e.target.value)} type="email" className={inputCls} /></Field>
+            <Field label="Mobile"><input value={phone} onChange={e => setPhone(e.target.value)} className={inputCls} /></Field>
+            <Button type="submit">{saved ? <><Check className="size-4" /> Saved</> : 'Save changes'}</Button>
+          </form>
+        </Card>
+
         <Card>
           <CardHeader icon={Eye} title="Appearance" subtitle="Saved per browser" />
           <div className="p-5">
@@ -30,15 +58,6 @@ export function SettingsPage() {
               </span>
             </label>
           </div>
-        </Card>
-
-        <Card>
-          <CardHeader title="Account" subtitle="Signed in" />
-          <dl className="divide-y divide-slate-100 px-5 text-sm">
-            <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Name</dt><dd className="font-medium text-slate-900">{user.full_name}</dd></div>
-            <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Email</dt><dd className="truncate font-medium text-slate-900">{user.email}</dd></div>
-            <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Mobile</dt><dd className="font-medium text-slate-900">{user.phone}</dd></div>
-          </dl>
         </Card>
 
         <Card>
