@@ -1,13 +1,14 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { db, respond, write } from '../../lib/mock/db'
-import { canSeeLead, isManager, normalizePhone, uid } from '../../lib/rules'
+import { supabase } from '../../lib/supabase'
+import { canSeeLead, isManager, normalizePhone } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import type { Contact, Profile } from '../../lib/types'
 import { activityFeed } from '../leads/api'
 
 export type ContactInput = Pick<Contact, 'name' | 'phone' | 'email' | 'kind'>
 
-/** RLS stand-in: managers see all; agents see contacts on their leads or ones they added. */
+/** RLS already scopes `db.contacts`/`db.leads`; this filter is a harmless no-op on top. */
 const canSeeContact = (user: Profile, c: Contact) =>
   isManager(user) || c.created_by === user.id || db.leads.some(l => l.contact_id === c.id && l.assigned_to === user.id)
 
@@ -54,7 +55,7 @@ export function useSaveContact() {
   const user = useUser()
   return useMutation({
     mutationFn: ({ id, input }: { id?: string; input: ContactInput }) =>
-      write(() => {
+      write(async () => {
         const phone = normalizePhone(input.phone)
         if (!phone) throw new Error('Enter a valid mobile number')
         if (!input.name.trim()) throw new Error('Name is required')
@@ -63,10 +64,14 @@ export function useSaveContact() {
         const patch = { name: input.name.trim(), phone, email: input.email?.trim() || null, kind: input.kind }
         const existing = db.contacts.find(c => c.id === id)
         if (id && (!existing || !canSeeContact(user, existing))) throw new Error('Contact not found')
-        if (existing) return Object.assign(existing, patch)
-        const c: Contact = { ...patch, id: uid(), created_by: user.id, created_at: new Date().toISOString() }
-        db.contacts.push(c)
-        return c
+        if (existing) {
+          const { data, error } = await supabase.from('contacts').update(patch).eq('id', id).select().single()
+          if (error) throw new Error(error.message)
+          return data
+        }
+        const { data, error } = await supabase.from('contacts').insert({ ...patch, created_by: user.id }).select().single()
+        if (error) throw new Error(error.message)
+        return data
       }),
   })
 }

@@ -1,6 +1,6 @@
 // Weekly snapshots of the record store. They live in the IndexedDB bucket that already holds
 // document bodies, because localStorage is far too small to keep several copies of the data.
-import { db, KEY } from './mock/db'
+import { db } from './mock/db'
 import { deleteFile, getFile, listFiles, putFile } from './mock/files'
 import type { Tables } from './types'
 
@@ -73,22 +73,10 @@ export const downloadNow = () =>
   )
 
 /**
- * Replace the whole store from a backup file. The file comes from outside the app, so its
- * shape is checked before anything is overwritten; the caller confirms with the user first.
+ * Replace the whole store from a backup file. Now that the store is Postgres, a restore means
+ * bulk-upserting every table in FK order against live RLS — risky to do generically, so it's
+ * not wired up yet. Restore a snapshot by running its tables through the Supabase SQL editor.
  */
-export async function restoreBackup(file: File) {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(await file.text())
-  } catch {
-    throw new Error('That file is not valid JSON.')
-  }
-  const tables = (parsed as Partial<BackupFile> | null)?.tables as Record<string, unknown> | undefined
-  if (!tables || typeof tables !== 'object') throw new Error('That file is not a Luxerefy backup.')
-  const missing = TABLES.filter(t => !Array.isArray(tables[t]))
-  if (missing.length) throw new Error(`This backup is missing ${missing.join(', ')}, so it cannot be restored.`)
-  if (!(tables.pipelines as unknown[]).length) throw new Error('This backup has no pipelines in it.')
-
-  localStorage.setItem(KEY, JSON.stringify(tables))
-  location.reload()
+export async function restoreBackup(_file: File): Promise<never> {
+  throw new Error('Restoring from a file is not available yet — the data now lives in Supabase, not this browser.')
 }

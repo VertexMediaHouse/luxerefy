@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { Check, ChevronRight, DatabaseBackup, Eye, RotateCcw, Settings, UserCog } from 'lucide-react'
+import { Check, ChevronRight, DatabaseBackup, Eye, Settings, UserCog } from 'lucide-react'
 import { Button, Card, CardHeader, Field, inputCls, PageHeader } from '../../components/ui'
 import { useUser } from '../../lib/session'
 import { toggleEyeSafe, useEyeSafe } from '../../lib/eyeSafe'
-import { db, resetDemo, save } from '../../lib/mock/db'
+import { refresh } from '../../lib/mock/db'
+import { supabase } from '../../lib/supabase'
 
 const LINKS = [
   { to: '/backup', icon: DatabaseBackup, label: 'Backups', hint: 'Weekly snapshots, download and restore' },
@@ -19,17 +20,15 @@ export function SettingsPage() {
   const [phone, setPhone] = useState(user.phone)
   const [saved, setSaved] = useState(false)
 
-  const saveProfile = (e: FormEvent) => {
+  const saveProfile = async (e: FormEvent) => {
     e.preventDefault()
-    const p = db.profiles.find(p => p.id === user.id)
-    if (p) {
-      p.full_name = name.trim() || p.full_name
-      p.email = email.trim() || p.email
-      p.phone = phone.trim() || p.phone
-      save()
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    }
+    const { error } = await supabase.from('profiles').update({
+      full_name: name.trim() || user.full_name, email: email.trim() || user.email, phone: phone.trim() || user.phone,
+    }).eq('id', user.id)
+    if (error) return alert(error.message)
+    await refresh()
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
   }
 
   return (
@@ -76,19 +75,6 @@ export function SettingsPage() {
               </li>
             ))}
           </ul>
-        </Card>
-
-        <Card>
-          <CardHeader icon={RotateCcw} title="Demo data" subtitle="This build stores everything in your browser" />
-          <div className="space-y-3 p-5">
-            <p className="text-sm leading-relaxed text-slate-500">
-              Resetting throws away every change made here and reloads the original sample workspace. Take a backup first if
-              you want to keep anything.
-            </p>
-            <Button variant="danger" onClick={() => confirm('Reset all demo data to the original sample? This cannot be undone.') && resetDemo()}>
-              <RotateCcw className="size-4" /> Reset demo data
-            </Button>
-          </div>
         </Card>
       </div>
     </>

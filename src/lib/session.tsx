@@ -1,24 +1,44 @@
-// Mock auth. Becomes supabase.auth + the profiles row once connected.
-import { createContext, useContext, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { db, respond } from './mock/db'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from './supabase'
+import { db, refresh } from './mock/db'
 import type { Profile } from './types'
 
-const KEY = 'luxerefy-crm-user'
-const Ctx = createContext<{ user: Profile | null; signIn: (id: string) => void; signOut: () => void } | null>(null)
+type Session = { user: Profile | null; loading: boolean; signIn: (email: string, password: string) => Promise<void>; signOut: () => Promise<void> }
+const Ctx = createContext<Session | null>(null)
 
-export const useProfiles = () =>
-  useQuery({ queryKey: ['profiles'], queryFn: () => respond(db.profiles), initialData: () => structuredClone(db.profiles) })
+export const useProfiles = () => useQuery({ queryKey: ['profiles'], queryFn: () => db.profiles, initialData: () => db.profiles })
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [userId, setUserId] = useState(() => { try { return localStorage.getItem(KEY) } catch { return null } })
-  const { data: profiles } = useProfiles()
-  const user = profiles.find(p => p.id === userId && p.active) ?? null
-  const persist = (id: string | null) => {
-    setUserId(id)
-    try { if (id) localStorage.setItem(KEY, id); else localStorage.removeItem(KEY) } catch { /* session lasts this tab only */ }
+  const [user, setUser] = useState<Profile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const qc = useQueryClient()
+
+  const loadProfile = async (uid: string) => {
+    await refresh()
+    setUser(db.profiles.find(p => p.id === uid) ?? null)
   }
-  return <Ctx.Provider value={{ user, signIn: persist, signOut: () => persist(null) }}>{children}</Ctx.Provider>
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      const uid = data.session?.user.id
+      if (uid) loadProfile(uid).finally(() => setLoading(false))
+      else setLoading(false)
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) loadProfile(session.user.id)
+      else { setUser(null); qc.clear() }
+    })
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw new Error(error.message)
+  }
+  const signOut = async () => { await supabase.auth.signOut() }
+
+  return <Ctx.Provider value={{ user, loading, signIn, signOut }}>{children}</Ctx.Provider>
 }
 
 export const useSession = () => useContext(Ctx)!

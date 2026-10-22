@@ -2,8 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { CheckCircle2, Send } from 'lucide-react'
 import { Brand } from '../../components/Layout'
 import { Button, Field, inputCls } from '../../components/ui'
-import { db, write } from '../../lib/mock/db'
-import { captureLead } from '../../lib/rules'
+import { supabase } from '../../lib/supabase'
 
 export function SalesFormPage() {
   const [done, setDone] = useState(false)
@@ -17,11 +16,14 @@ export function SalesFormPage() {
     const f = new FormData(e.currentTarget)
     const s = (k: string) => String(f.get(k) ?? '').trim()
     try {
-      await write(() => captureLead(db, {
-        name: s('name'), phone: s('phone'), email: s('email') || null,
-        source: 'other', property_interest: s('interest') || null,
-        notes: s('notes') || null, referral_detail: 'Sales Team',
-      }, null))
+      // Anon flow: calls the RPC directly, no refresh() — there is no signed-in mirror to update.
+      const { error } = await supabase.rpc('capture_lead', {
+        p_name: s('name'), p_phone: s('phone'), p_source: 'other', p_email: s('email') || null,
+        p_property_ids: null, p_pipeline_id: null, p_property_interest: s('interest') || null,
+        p_budget_min: null, p_budget_max: null, p_city: null, p_external_ref: null,
+        p_referral_detail: 'Sales Team', p_message: null, p_notes: s('notes') || null, p_actor_id: null,
+      })
+      if (error) throw new Error(error.message)
       setDone(true)
     } catch (ex) {
       setErr((ex as Error).message)

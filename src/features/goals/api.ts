@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { db, respond, write } from '../../lib/mock/db'
-import { goalProgress, periodRange, uid } from '../../lib/rules'
+import { supabase } from '../../lib/supabase'
+import { goalProgress, periodRange } from '../../lib/rules'
 import type { Goal, GoalMetric, GoalPeriod } from '../../lib/types'
 
 export type GoalRow = Goal & { actual: number }
@@ -20,21 +21,21 @@ export function useGoals() {
 export function useSaveGoal() {
   return useMutation({
     mutationFn: ({ period, metric, target }: { period: GoalPeriod; metric: GoalMetric; target: number }) =>
-      write(() => {
+      write(async () => {
         if (!Number.isFinite(target) || target < 0) throw new Error('Enter a target of zero or more')
-        const now = new Date().toISOString()
         const existing = db.goals.find(g => g.period === period && g.metric === metric)
         if (target === 0) {
-          db.goals = db.goals.filter(g => g !== existing)
+          if (existing) await supabase.from('goals').delete().eq('id', existing.id)
           return null
         }
         if (existing) {
-          Object.assign(existing, { target, updated_at: now })
-          return existing
+          const { data, error } = await supabase.from('goals').update({ target }).eq('id', existing.id).select().single()
+          if (error) throw new Error(error.message)
+          return data
         }
-        const g: Goal = { id: uid(), period, metric, target, created_at: now, updated_at: now }
-        db.goals.push(g)
-        return g
+        const { data, error } = await supabase.from('goals').insert({ period, metric, target }).select().single()
+        if (error) throw new Error(error.message)
+        return data
       }),
   })
 }

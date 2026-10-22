@@ -1,44 +1,33 @@
-// In-browser stand-in for Supabase. Only feature api.ts files and lib/stages.ts import this.
+// Supabase-backed store. `db` is a live mirror of the tables the current user's RLS allows;
+// `write(fn)` runs fn (which issues the real Supabase calls), then refreshes the mirror so
+// every query hook (which still reads `db` directly, same as the old mock) sees the new state.
+import { supabase } from '../supabase'
 import type { Tables } from '../types'
-import { escalateTickets } from '../rules'
-import { seed } from './seed'
 
-export const KEY = 'luxerefy-crm-mock-v5'
-
-function load(): Tables {
-  try {
-    const raw = localStorage.getItem(KEY)
-    // A store written before pipelines or goals existed would render blank, so re-seed instead.
-    if (raw) {
-      const t = JSON.parse(raw) as Tables
-      if (t.pipelines?.length && t.stages?.length && t.goals) return t
-    }
-  } catch { /* unreadable storage → fresh seed */ }
-  return seed()
+export const db: Tables = {
+  profiles: [], contacts: [], properties: [], pipelines: [], stages: [], leads: [],
+  lead_activities: [], tasks: [], tickets: [], documents: [], goals: [],
 }
 
-export const db: Tables = load()
+const TABLES = Object.keys(db) as (keyof Tables)[]
 
-export function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { /* demo edits just won't survive a reload */ }
+export async function refresh() {
+  const results = await Promise.all(TABLES.map(t => supabase.from(t).select('*')))
+  results.forEach((r, i) => {
+    if (r.error) throw new Error(r.error.message)
+    ;(db[TABLES[i]] as unknown[]) = r.data ?? []
+  })
 }
 
-export function resetDemo() {
-  try { localStorage.removeItem(KEY) } catch { /* nothing to clear */ }
-  location.reload()
+/** Kept so call sites that just return a value don't need to change. */
+export const respond = <T,>(value: T) => Promise.resolve(value)
+
+/** Run a real write against Supabase, then refresh the mirror. Throwing inside fn rejects like a failed RLS check. */
+export const write = async <T,>(fn: () => Promise<T>): Promise<T> => {
+  const out = await fn()
+  await refresh()
+  return out
 }
 
-/** Simulated round-trip. Returns a copy so cached query data never aliases the store. */
-export const respond = <T,>(value: T) => new Promise<T>(r => setTimeout(() => r(structuredClone(value)), 120))
-
-/** Run a write against the store, persist, respond. Throwing inside fn rejects like a failed RLS check. */
-export const write = async <T,>(fn: () => T) => {
-  const out = fn()
-  save()
-  return respond(out)
-}
-
-/** Stand-in for the pg_cron escalation job: runs whenever ticket data is read. */
-export function cron() {
-  if (escalateTickets(db)) save()
-}
+/** Escalation now runs server-side (pg_cron calling escalate_overdue_tickets()); nothing to do client-side. */
+export function cron() {}
