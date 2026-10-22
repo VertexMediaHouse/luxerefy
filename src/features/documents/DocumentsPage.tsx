@@ -19,7 +19,7 @@ export function DocumentsPage() {
 
   return (
     <>
-      <PageHeader icon={FileText} tint="text-amber-500" title="Documents" subtitle="Agreements, KYC and property files, filed against the lead or property" actions={<Button onClick={() => setUploading(true)}><Upload className="size-4" /> Upload</Button>} />
+      <PageHeader icon={FileText} title="Documents" subtitle="Agreements, KYC and property files, filed against the lead or property" actions={<Button onClick={() => setUploading(true)}><Upload className="size-4" /> Upload</Button>} />
       <Card>
         <Toolbar>
           <Tabs value={folder} onChange={setFolder} items={[{ value: 'all', label: 'All', count: base.length }, ...DOC_FOLDERS.map(f => ({ value: f, label: f, count: base.filter(d => d.folder === f).length }))]} />

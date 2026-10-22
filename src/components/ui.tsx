@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ChevronRight, Loader2, Plus, Search, X } from 'lucide-react'
 import type { Tone } from '../lib/labels'
@@ -7,7 +7,7 @@ import type { LeadStatus } from '../lib/types'
 import { initials } from '../lib/format'
 
 const BTN = {
-  primary: 'bg-slate-900 text-white shadow-soft hover:bg-slate-700',
+  primary: 'bg-ink text-white shadow-soft hover:bg-slate-700',
   secondary: 'bg-white text-slate-700 shadow-soft ring-1 ring-slate-200/80 hover:bg-slate-50 hover:text-slate-900',
   ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
   danger: 'bg-white text-red-600 ring-1 ring-slate-200 hover:bg-red-50 hover:ring-red-200',
@@ -24,17 +24,24 @@ export function Button({ variant = 'primary', className = '', ...p }: ButtonHTML
 /** White pill control for toolbars (filters, view switch, selects). */
 export const pillCls = 'inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-soft ring-1 ring-slate-200/80 hover:bg-slate-50'
 
-export function Card({ className = '', children }: { className?: string; children: ReactNode }) {
-  return <div className={`min-w-0 rounded-2xl bg-white shadow-card ring-1 ring-slate-200/70 ${className}`}>{children}</div>
+const CARD = {
+  plain: 'bg-white ring-slate-200/70',
+  dark: 'bg-ink text-white ring-white/10',
+  tint: 'bg-blue-50 ring-blue-200/70',
+}
+export type CardTone = keyof typeof CARD
+
+export function Card({ className = '', tone = 'plain', children }: { className?: string; tone?: CardTone; children: ReactNode }) {
+  return <div className={`min-w-0 rounded-2xl shadow-card ring-1 ${CARD[tone]} ${className}`}>{children}</div>
 }
 
 export function CardHeader({ title, subtitle, action, icon: Icon }: { title: string; subtitle?: ReactNode; action?: ReactNode; icon?: ComponentType<{ className?: string }> }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-slate-100 px-5 py-3.5">
       <div className="flex min-w-0 items-center gap-2">
         {Icon && <Icon className="size-4 shrink-0 text-slate-400" />}
-        <h2 className="text-sm font-medium text-slate-900">{title}</h2>
-        {subtitle && <span className="truncate text-xs text-slate-400">{subtitle}</span>}
+        <h2 className="shrink-0 text-sm font-medium text-slate-900">{title}</h2>
+        {subtitle && <span className="min-w-0 truncate text-xs text-slate-400">{subtitle}</span>}
       </div>
       {action}
     </div>
@@ -49,20 +56,24 @@ export function HeaderLink({ to, onClick, children }: { to?: string; onClick?: (
     : <button type="button" onClick={onClick} className={cls}><Plus className="size-3.5" />{children}</button>
 }
 
+/**
+ * Greyscale except the two that carry meaning: green is won, red is lost. The other four
+ * tones differ only in weight, so a custom stage still reads as distinct without adding a hue.
+ */
 const TONE: Record<Tone, [string, string]> = {
-  slate: ['bg-slate-100', 'bg-slate-400'],
-  blue: ['bg-sky-50', 'bg-sky-500'],
-  violet: ['bg-violet-50', 'bg-violet-500'],
-  amber: ['bg-amber-50', 'bg-amber-500'],
-  green: ['bg-emerald-50', 'bg-emerald-500'],
-  red: ['bg-red-50', 'bg-red-500'],
+  slate: ['bg-slate-100 text-slate-700', 'bg-slate-400'],
+  blue: ['bg-blue-50 text-blue-700', 'bg-blue-600'],
+  violet: ['bg-blue-100 text-blue-800', 'bg-blue-800'],
+  amber: ['bg-sky-50 text-sky-700', 'bg-sky-500'],
+  green: ['bg-emerald-50 text-emerald-700', 'bg-emerald-500'],
+  red: ['bg-red-50 text-red-700', 'bg-red-600'],
 }
 export const toneDot = (t: Tone) => TONE[t][1]
 
 /** Soft grey-ish chip; the coloured dot carries the meaning. */
 export function Badge({ tone = 'slate', children, dot = true }: { tone?: Tone; children: ReactNode; dot?: boolean }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-700 ${TONE[tone][0]}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-medium ${TONE[tone][0]}`}>
       {dot && <span className={`size-1.5 rounded-full ${TONE[tone][1]}`} />}
       {children}
     </span>
@@ -71,7 +82,7 @@ export function Badge({ tone = 'slate', children, dot = true }: { tone?: Tone; c
 
 /** The ring fill and colour come from the stage row now, so a custom stage draws itself. */
 export const TONE_HEX: Record<Tone, string> = {
-  slate: '#94a3b8', blue: '#0ea5e9', violet: '#8b5cf6', amber: '#f59e0b', green: '#10b981', red: '#ef4444',
+  slate: '#94a3b8', blue: '#2563eb', violet: '#1e40af', amber: '#0ea5e9', green: '#10b981', red: '#ef4444',
 }
 export function StageIcon({ status, className = 'size-3.5' }: { status: LeadStatus; className?: string }) {
   const kind = stageKind(status)
@@ -101,12 +112,90 @@ export function StageChip({ status }: { status: LeadStatus }) {
   )
 }
 
-const AVATAR = ['bg-orange-100 text-orange-800', 'bg-sky-100 text-sky-800', 'bg-emerald-100 text-emerald-800', 'bg-violet-100 text-violet-800', 'bg-rose-100 text-rose-800', 'bg-amber-100 text-amber-900']
-export function Avatar({ name, size = 'md' }: { name: string; size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' }) {
-  const color = AVATAR[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR.length]
-  const dim = { xs: 'size-6 text-[10px]', sm: 'size-7 text-[11px]', md: 'size-8 text-xs', lg: 'size-12 text-base', xl: 'size-16 text-xl' }[size]
-  return <span aria-hidden className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold ring-2 ring-white ${dim} ${color}`}>{initials(name)}</span>
+const AVATAR = ['bg-blue-100 text-blue-800', 'bg-ink text-white', 'bg-blue-600 text-white', 'bg-slate-200 text-slate-700', 'bg-blue-800 text-white', 'bg-sky-100 text-sky-800']
+
+const MOCK_AVATAR_PHOTOS = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1534751516642-a171ed28a994?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1548142813-c348350df52b?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1542909168-82c3e7fdca5c?w=200&h=200&fit=crop&crop=faces&q=80',
+  'https://images.unsplash.com/photo-1517456793572-1d8efd6dc135?w=200&h=200&fit=crop&crop=faces&q=80',
+]
+
+export function getMockAvatarUrl(name: string): string {
+  const hash = [...name].reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) | 0, 0)
+  return MOCK_AVATAR_PHOTOS[Math.abs(hash) % MOCK_AVATAR_PHOTOS.length]
 }
+
+export function Avatar({
+  name,
+  src,
+  size = 'md',
+  initialsOnly = false,
+  className = '',
+}: {
+  name: string
+  src?: string | null
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+  initialsOnly?: boolean
+  className?: string
+}) {
+  const [hasError, setHasError] = useState(false)
+  const color = AVATAR[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR.length]
+  const dim = {
+    xs: 'size-6 text-[10px]',
+    sm: 'size-7 text-[11px]',
+    md: 'size-8 text-xs',
+    lg: 'size-12 text-base',
+    xl: 'size-16 text-xl',
+  }[size]
+
+  const avatarUrl = src ?? (initialsOnly ? null : getMockAvatarUrl(name))
+
+  if (!avatarUrl || hasError) {
+    return (
+      <span
+        aria-hidden
+        className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold ring-2 ring-white select-none ${dim} ${color} ${className}`}
+      >
+        {initials(name)}
+      </span>
+    )
+  }
+
+  return (
+    <span
+      className={`relative inline-flex shrink-0 overflow-hidden rounded-full bg-slate-100 ring-2 ring-white shadow-soft ${dim} ${className}`}
+      title={name}
+      aria-label={name}
+    >
+      <img
+        src={avatarUrl}
+        alt={name}
+        onError={() => setHasError(true)}
+        className="size-full object-cover"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
+    </span>
+  )
+}
+
 export function AvatarStack({ names, max = 4 }: { names: string[]; max?: number }) {
   return (
     <span className="flex -space-x-1.5" title={names.join(', ')}>
@@ -224,6 +313,27 @@ export function Loading() {
 
 export function ErrorText({ error }: { error: unknown }) {
   return error ? <p role="alert" className="text-sm font-medium text-red-600">{error instanceof Error ? error.message : String(error)}</p> : null
+}
+
+/** iOS-style segmented control: one pill slides between two or three equal choices. */
+export function Segmented<T extends string>({ value, onChange, items, label }: { value: T; onChange: (v: T) => void; items: { value: T; label: string; icon?: ComponentType<{ className?: string }> }[]; label: string }) {
+  return (
+    <div className="inline-flex gap-0.5 rounded-xl bg-slate-100 p-0.5 ring-1 ring-slate-200/70" role="group" aria-label={label}>
+      {items.map(({ value: v, label: l, icon: I }) => (
+        <button
+          key={v}
+          type="button"
+          aria-pressed={value === v}
+          onClick={() => onChange(v)}
+          className={`inline-flex items-center gap-1.5 rounded-[0.625rem] px-3 py-1.5 text-sm font-medium whitespace-nowrap transition ${
+            value === v ? 'bg-white text-slate-900 shadow-soft ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          {I && <I className="size-4" />}{l}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 /** Underline view tabs with counts; sit them on a bottom border (Toolbar, or a border-b wrapper). */

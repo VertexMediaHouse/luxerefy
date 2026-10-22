@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Button, ErrorText, Field, inputCls, Modal } from '../../components/ui'
-import { useProfiles, useUser } from '../../lib/session'
-import { isManager } from '../../lib/rules'
+import { useUser } from '../../lib/session'
 import { TASK_KIND_LABEL, TIMED_KINDS } from '../../lib/labels'
 import { toLocalInput } from '../../lib/format'
 import type { Task, TaskKind } from '../../lib/types'
@@ -22,7 +21,6 @@ export function TaskModal({ open, onClose, task, defaults }: Props) {
 
 function TaskForm({ task, defaults, onDone }: { task: Task | null; defaults: Partial<TaskInput>; onDone: () => void }) {
   const user = useUser()
-  const { data: profiles } = useProfiles()
   const { data: leads = [] } = useLeads()
   const { data: properties = [] } = useProperties()
   const save = useSaveTask()
@@ -41,7 +39,7 @@ function TaskForm({ task, defaults, onDone }: { task: Task | null; defaults: Par
         id: task?.id,
         input: {
           title: s('title'), kind, lead_id: s('lead_id') || null, property_id: s('property_id') || null,
-          assigned_to: s('assigned_to') || user.id, due_at: new Date(s('due_at')).toISOString(), ends_at: s('ends_at') ? new Date(s('ends_at')).toISOString() : null,
+          assigned_to: user.id, due_at: new Date(s('due_at')).toISOString(), ends_at: s('ends_at') ? new Date(s('ends_at')).toISOString() : null,
         },
       },
       { onSuccess: onDone },
@@ -57,14 +55,9 @@ function TaskForm({ task, defaults, onDone }: { task: Task | null; defaults: Par
           {Object.entries(TASK_KIND_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </Field>
-      {isManager(user) ? (
-        <Field label="Assigned to">
-          <select name="assigned_to" defaultValue={init.assigned_to ?? user.id} className={inputCls}>
-            {profiles.filter(p => p.active).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-          </select>
-        </Field>
-      ) : <p className="self-end pb-2 text-xs text-slate-500">Assigned to you.</p>}
-      <Field label={timed ? 'Starts' : 'Due'}><input name="due_at" type="datetime-local" required defaultValue={toLocalInput(start)} className={inputCls} /></Field>
+      <Field label={timed ? 'Starts' : 'Due'} hint={task ? 'Change this to reschedule — the lead timeline records the move' : undefined}>
+        <input name="due_at" type="datetime-local" required defaultValue={toLocalInput(start)} className={inputCls} />
+      </Field>
       <Field label={timed ? 'Ends *' : 'Ends (optional)'} hint={timed ? 'Blocks this slot; overlapping bookings are refused' : undefined}>
         <input
           key={String(timed)}

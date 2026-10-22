@@ -1,11 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { db, respond } from '../../lib/mock/db'
-import { isManager, isOpen, isWon } from '../../lib/rules'
+import { addedByMe, isWon } from '../../lib/rules'
 import { useUser } from '../../lib/session'
-import { defaultPipeline, stageKind, stagesOf } from '../../lib/stages'
-import type { Lead, LeadSource } from '../../lib/types'
+import { CATEGORIES, SEGMENTS, type LeadCut } from '../../lib/labels'
+import type { Lead, PropertyStatus } from '../../lib/types'
 import { activityFeed, visibleLeads } from '../leads/api'
 import { visibleTickets } from '../tickets/api'
+
+/** "Active" stock is anything still sellable — sold and off-market are out of the count. */
+const ACTIVE: PropertyStatus[] = ['available', 'reserved']
+
+const DAY = 86400e3
 
 /** Becomes the security-invoker dashboard_stats() RPC, so RLS scopes it per role for free. */
 export function useDashboard() {
@@ -15,43 +20,58 @@ export function useDashboard() {
     queryFn: () => {
       const now = Date.now()
       const leads = visibleLeads(user).sort((a, b) => b.created_at.localeCompare(a.created_at))
-      const name = (leadId: string | null) => {
-        const l = db.leads.find(l => l.id === leadId)
-        return db.contacts.find(c => c.id === l?.contact_id)?.name ?? ''
-      }
-      const tasks = db.tasks
-        .filter(t => t.status === 'pending' && (isManager(user) || t.assigned_to === user.id))
-        .sort((a, b) => a.due_at.localeCompare(b.due_at))
-      const tickets = visibleTickets(user).filter(t => t.status !== 'resolved')
-      const won = leads.filter(isWon).length
-      const bySource = new Map<LeadSource, number>()
-      for (const l of leads) bySource.set(l.source, (bySource.get(l.source) ?? 0) + 1)
-      const brief = (l: Lead) => ({ id: l.id, name: name(l.id), source: l.source, budget: l.budget_max ?? l.budget_min })
       const day0 = new Date(); day0.setHours(0, 0, 0, 0)
-      const daily = Array.from({ length: 30 }, (_, i) => {
-        const start = day0.getTime() - (29 - i) * 86400e3
-        return { day: new Date(start).toISOString(), count: leads.filter(l => { const t = Date.parse(l.created_at); return t >= start && t < start + 86400e3 }).length }
+
+      const cut = (ls: Lead[]) => ({
+        count: ls.length,
+        thisWeek: ls.filter(l => now - Date.parse(l.created_at) < 7 * DAY).length,
+        lastWeek: ls.filter(l => { const age = now - Date.parse(l.created_at); return age >= 7 * DAY && age < 14 * DAY }).length,
+        daily: Array.from({ length: 30 }, (_, i) => {
+          const start = day0.getTime() - (29 - i) * DAY
+          return { day: new Date(start).toISOString(), count: ls.filter(l => { const d = Date.parse(l.created_at); return d >= start && d < start + DAY }).length }
+        }),
       })
 
+      // "Added by me" is derived from the timeline, not a column — see addedByMe in rules.ts.
+      const mine = leads.filter(l => addedByMe(db, l.id, user.id))
+      const cuts: Record<LeadCut, ReturnType<typeof cut>> = {
+        '': cut(leads),
+        '99acres': cut(leads.filter(l => l.source === '99acres')),
+        social_media: cut(leads.filter(l => l.source === 'social_media')),
+        mine: cut(mine),
+      }
+
+      // Active stock, split residential/commercial, then by locality, then by the five types.
+      const active = db.properties.filter(p => ACTIVE.includes(p.status))
+      const stock = SEGMENTS.map(segment => {
+        const ps = active.filter(p => p.segment === segment)
+        const localities = [...new Set(ps.map(p => p.locality))].sort((a, b) => a.localeCompare(b))
+        return {
+          segment,
+          total: ps.length,
+          value: ps.reduce((v, p) => v + p.price, 0),
+          areas: localities.map(locality => {
+            const here = ps.filter(p => p.locality === locality)
+            return {
+              locality,
+              total: here.length,
+              byCategory: CATEGORIES.map(category => ({ category, count: here.filter(p => p.category === category).length })).filter(c => c.count > 0),
+            }
+          }),
+        }
+      })
+
+      const tickets = visibleTickets(user).filter(t => t.status !== 'resolved')
+      const won = leads.filter(isWon).length
+
       return respond({
-        total: leads.length,
-        thisWeek: leads.filter(l => now - Date.parse(l.created_at) < 7 * 86400e3).length,
-        lastWeek: leads.filter(l => { const age = now - Date.parse(l.created_at); return age >= 7 * 86400e3 && age < 14 * 86400e3 }).length,
-        daily,
-        fresh: leads.filter(l => stageKind(l.status) === 'entry').length,
-        followUps: tasks.length,
-        overdue: tasks.filter(t => Date.parse(t.due_at) < now).length,
-        openTickets: tickets.length,
-        breached: tickets.filter(t => Date.parse(t.sla_due_at) < now).length,
+        cuts,
+        stock,
         won,
         conversion: leads.length ? won / leads.length : 0,
-        pipeline: stagesOf(defaultPipeline().id).map(({ id: s }) => {
-          const ls = leads.filter(l => l.status === s)
-          return { status: s, open: isOpen({ status: s }), count: ls.length, value: ls.reduce((v, l) => v + (l.budget_max ?? l.budget_min ?? 0), 0), leads: ls.slice(0, 3).map(brief) }
-        }),
-        sources: [...bySource].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count),
-        upcoming: tasks.slice(0, 6).map(t => ({ ...t, lead: name(t.lead_id) })),
-        feed: activityFeed(new Set(leads.map(l => l.id)), 8),
+        openTickets: tickets.length,
+        breached: tickets.filter(t => Date.parse(t.sla_due_at) < now).length,
+        feed: activityFeed(new Set(leads.map(l => l.id)), 10),
       })
     },
   })

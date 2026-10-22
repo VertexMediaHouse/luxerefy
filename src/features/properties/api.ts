@@ -44,7 +44,8 @@ export function useDeleteProperty() {
       write(() => {
         if (!isManager(user)) throw new Error('Only owners and managers can delete properties.')
         db.properties = db.properties.filter(p => p.id !== id)
-        for (const l of db.leads) if (l.property_id === id) l.property_id = null // FK: on delete set null
+        // FK: on delete, drop it from every lead's interest list but keep the lead's history.
+        for (const l of db.leads) l.property_ids = l.property_ids.filter(pid => pid !== id)
       }),
   })
 }
@@ -56,7 +57,7 @@ export function useSubmitEnquiry(property: Property) {
       write(() => {
         if (!f.name.trim()) throw new Error('Please enter your name')
         captureLead(db, {
-          ...f, source: 'property_page', property_id: property.id,
+          ...f, source: 'property_page', property_ids: [property.id],
           property_interest: `${property.config}, ${property.locality}`, city: property.city,
         }, null)
       }),

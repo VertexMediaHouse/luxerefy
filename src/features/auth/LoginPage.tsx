@@ -24,14 +24,14 @@ export function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-2">
+    <div className="grid min-h-dvh bg-canvas lg:grid-cols-2">
       <div className="relative hidden lg:block">
         <img src={HERO} alt="" className="absolute inset-0 size-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/40 to-navy/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/50 to-ink/10" />
         <div className="absolute inset-x-0 bottom-0 p-12 text-white">
           <Brand light />
           <p className="mt-6 max-w-md text-2xl leading-snug font-bold">Every enquiry captured. Every follow-up on time.</p>
-          <p className="mt-2 max-w-md text-blue-100/80">Leads from 99acres, your website and referrals land in one place — assigned, tracked and followed up.</p>
+          <p className="mt-2 max-w-md text-white/70">Leads from 99acres, social media, your website and referrals land in one place — tracked and followed up.</p>
         </div>
       </div>
 
@@ -39,7 +39,7 @@ export function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="lg:hidden"><Brand /></div>
           <h1 className="mt-8 text-2xl font-semibold text-slate-900 lg:mt-0">Sign in to your CRM</h1>
-          <p className="mt-1 text-sm text-slate-500">Team accounts are invite-only.</p>
+          <p className="mt-1 text-sm text-slate-500">Accounts are invite-only.</p>
 
           <form onSubmit={submit} className="mt-8 space-y-4">
             <Field label="Email"><input name="email" type="email" required autoComplete="email" className={inputCls} placeholder="you@luxerefy.com" /></Field>
@@ -49,7 +49,7 @@ export function LoginPage() {
           </form>
 
           <div className="mt-10">
-            <p className="text-sm font-semibold text-slate-700">Or sign in as a demo user</p>
+            <p className="text-sm font-semibold text-slate-700">Or use the demo account</p>
             <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-xl bg-white shadow-card ring-1 ring-slate-900/[0.07]">
               {profiles.filter(p => p.active).map(p => (
                 <li key={p.id}>
@@ -59,7 +59,7 @@ export function LoginPage() {
                       <span className="block text-sm font-semibold text-slate-900">{p.full_name}</span>
                       <span className="block text-xs text-slate-500">{ROLE_LABEL[p.role]}, {p.email}</span>
                     </span>
-                    <ArrowRight className="size-4 text-slate-300 group-hover:text-blue-600" />
+                    <ArrowRight className="size-4 text-slate-300 group-hover:text-slate-900" />
                   </button>
                 </li>
               ))}

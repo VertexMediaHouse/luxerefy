@@ -4,9 +4,9 @@ import { Building2, ExternalLink, Trash2 } from 'lucide-react'
 import { Button, buttonCls, Card, CardHeader, Empty, ErrorText, Field, inputCls, Loading, PageHeader } from '../../components/ui'
 import { useUser } from '../../lib/session'
 import { isManager } from '../../lib/rules'
-import { PROPERTY_STATUS_LABEL } from '../../lib/labels'
+import { CATEGORIES, CATEGORY_LABEL, PROPERTY_STATUS_LABEL, SEGMENT_LABEL, SEGMENTS } from '../../lib/labels'
 import { inr } from '../../lib/format'
-import type { Property, PropertyStatus } from '../../lib/types'
+import type { Property, PropertyCategory, PropertySegment, PropertyStatus } from '../../lib/types'
 import { shareUrl, useDeleteProperty, useProperty, useSaveProperty } from './api'
 import { CopyLinkButton } from './PropertiesPage'
 import { DocumentsPanel } from '../documents/DocumentParts'
@@ -38,6 +38,7 @@ function PropertyForm({ initial }: { initial: Property | null }) {
         id: initial?.id,
         input: {
           title: s('title'), project: s('project'), config: s('config'), area_sqft: Number(s('area_sqft')) || 0, price: Math.round(Number(price) * 1e7) || 0,
+          segment: s('segment') as PropertySegment, category: s('category') as PropertyCategory,
           locality: s('locality'), city: s('city') || 'Ahmedabad', description: s('description'),
           amenities: s('amenities').split(',').map(a => a.trim()).filter(Boolean),
           specs: Object.fromEntries(lines(s('specs')).filter(l => l.includes(':')).map(l => [l.slice(0, l.indexOf(':')).trim(), l.slice(l.indexOf(':') + 1).trim()])),
@@ -71,6 +72,16 @@ function PropertyForm({ initial }: { initial: Property | null }) {
             <CardHeader title="Basics" />
             <div className="grid gap-4 p-5 sm:grid-cols-2">
               <Field label="Title *" className="sm:col-span-2"><input name="title" required defaultValue={initial?.title} className={inputCls} placeholder="Aurelia Sky Villa" /></Field>
+              <Field label="Segment" hint="Drives the dashboard split">
+                <select name="segment" defaultValue={initial?.segment ?? 'residential'} className={inputCls}>
+                  {SEGMENTS.map(v => <option key={v} value={v}>{SEGMENT_LABEL[v]}</option>)}
+                </select>
+              </Field>
+              <Field label="Type" hint="Counted per locality on the dashboard">
+                <select name="category" defaultValue={initial?.category ?? 'apartment'} className={inputCls}>
+                  {CATEGORIES.map(v => <option key={v} value={v}>{CATEGORY_LABEL[v]}</option>)}
+                </select>
+              </Field>
               <Field label="Project / society"><input name="project" defaultValue={initial?.project} className={inputCls} /></Field>
               <Field label="Configuration"><input name="config" defaultValue={initial?.config} className={inputCls} placeholder="4 BHK Penthouse" /></Field>
               <Field label="Price (₹ Cr)" hint={Number(price) > 0 ? inr(Number(price) * 1e7) : undefined}><input type="number" min="0" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className={inputCls} /></Field>

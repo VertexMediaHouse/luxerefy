@@ -74,7 +74,7 @@ export function ImportLeadsModal({ open, onClose }: { open: boolean; onClose: ()
               <p className="mt-0.5 text-slate-600">
                 {imp.data.merged > 0 && <>{imp.data.merged} merged into an existing open lead. </>}
                 {bad.length > 0 && <>{bad.length} {bad.length === 1 ? 'row' : 'rows'} skipped. </>}
-                Each one was assigned to the agent with the fewest open leads.
+                They all landed on the entry stage of the selected pipeline.
               </p>
             </div>
           </div>

@@ -24,7 +24,7 @@ export function ContactsPage() {
 
   return (
     <>
-      <PageHeader icon={Contact2} tint="text-sky-500" title="Contacts" subtitle="Clients, leads and vendors in one searchable list" actions={<Button onClick={() => setAdding(true)}><Plus className="size-4" /> New contact</Button>} />
+      <PageHeader icon={Contact2} title="Contacts" subtitle="Clients, leads and vendors in one searchable list" actions={<Button onClick={() => setAdding(true)}><Plus className="size-4" /> New contact</Button>} />
       <Card>
         <Toolbar>
           <Tabs value={kind} onChange={setKind} items={[

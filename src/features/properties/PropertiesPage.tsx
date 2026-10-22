@@ -33,7 +33,7 @@ export function PropertiesPage() {
 
   return (
     <>
-      <PageHeader icon={Building2} tint="text-emerald-500" title="Properties" subtitle="One record per property, with a shareable page for clients" actions={<Link to="/properties/new" className={buttonCls()}><Plus className="size-4" /> New property</Link>} />
+      <PageHeader icon={Building2} title="Properties" subtitle="One record per property, with a shareable page for clients" actions={<Link to="/properties/new" className={buttonCls()}><Plus className="size-4" /> New property</Link>} />
       <Card className="mb-5 [&>div]:border-0">
         <Toolbar>
         <Tabs value={status} onChange={setStatus} items={[

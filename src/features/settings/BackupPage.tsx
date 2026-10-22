@@ -34,7 +34,6 @@ export function BackupPage() {
     <>
       <PageHeader
         icon={DatabaseBackup}
-        tint="text-sky-600"
         title="Backups"
         subtitle="A snapshot is taken automatically once a week when you open the CRM. The last eight are kept."
         actions={mgr ? (

@@ -16,7 +16,7 @@ export function PublicPropertyPage() {
       <header className="border-b border-slate-100">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
           <Brand />
-          <a href="#enquire" className="rounded-full bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-2">Enquire</a>
+          <a href="#enquire" className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">Enquire</a>
         </div>
       </header>
       {isLoading ? <Loading /> : data ? <Listing p={data} /> : (
@@ -65,7 +65,7 @@ function Listing({ p }: { p: Property }) {
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-slate-900">{p.title}</h1>
           <p className="mt-2 flex items-center gap-1.5 text-slate-500"><MapPin className="size-4" /> {p.locality}, {p.city}</p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <span className="text-3xl font-extrabold text-navy">{inr(p.price)}</span>
+            <span className="text-3xl font-extrabold text-ink">{inr(p.price)}</span>
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{PROPERTY_STATUS_LABEL[p.status]}</span>
           </div>
           <div className="mt-6 flex flex-wrap gap-3 text-sm font-semibold text-slate-700">

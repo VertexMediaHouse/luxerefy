@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { Contact2, Mail, MessageCircle, Pencil, Phone } from 'lucide-react'
+import { Contact2, Mail, Pencil, Phone } from 'lucide-react'
 import { Avatar, Badge, Button, buttonCls, Card, CardHeader, Empty, Loading, PageHeader, StageChip } from '../../components/ui'
 import { SOURCE_LABEL } from '../../lib/labels'
 import { budget, prettyPhone, relative } from '../../lib/format'
@@ -25,7 +25,7 @@ export function ContactDetailPage() {
         back={{ to: '/contacts', label: 'Contacts' }}
         title={c.name}
         actions={<>
-          <a href={`https://wa.me/${c.phone.slice(1)}`} target="_blank" rel="noreferrer" className={buttonCls('secondary')}><MessageCircle className="size-4 text-green-600" /> WhatsApp</a>
+          <a href={`tel:${c.phone}`} className={buttonCls('secondary')}><Phone className="size-4" /> Call</a>
           <Button variant="secondary" onClick={() => setEditing(true)}><Pencil className="size-4" /> Edit</Button>
         </>}
       />
@@ -57,7 +57,7 @@ export function ContactDetailPage() {
                         <span className="truncate text-sm font-semibold text-slate-800">{l.property?.title ?? l.property_interest ?? 'General enquiry'}</span>
                         <StageChip status={l.status} />
                       </span>
-                      <span className="text-xs text-slate-500">{SOURCE_LABEL[l.source]}, {budget(l.budget_min, l.budget_max)}, {l.agent ?? 'Unassigned'}</span>
+                      <span className="text-xs text-slate-500">{SOURCE_LABEL[l.source]}, {budget(l.budget_min, l.budget_max)}</span>
                     </Link>
                   </li>
                 ))}

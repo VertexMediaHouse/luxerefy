@@ -12,11 +12,12 @@ import { PublicPropertyPage } from './features/properties/PublicPropertyPage'
 import { TicketsPage } from './features/tickets/TicketsPage'
 import { TeamPage } from './features/settings/TeamPage'
 import { BackupPage } from './features/settings/BackupPage'
-import { PipelinePage } from './features/pipeline/PipelinePage'
+import { SettingsPage } from './features/settings/SettingsPage'
 import { ContactsPage } from './features/contacts/ContactsPage'
 import { ContactDetailPage } from './features/contacts/ContactDetailPage'
 import { CalendarPage } from './features/calendar/CalendarPage'
 import { TasksPage } from './features/tasks/TasksPage'
+import { GoalsPage } from './features/goals/GoalsPage'
 import { DocumentsPage } from './features/documents/DocumentsPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -39,10 +40,13 @@ export function App() {
         <Route path="contacts/:id" element={<ContactDetailPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="tasks" element={<TasksPage />} />
+        <Route path="goals" element={<GoalsPage />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="tickets" element={<TicketsPage />} />
-        <Route path="pipeline" element={<PipelinePage />} />
-        <Route path="pipelines" element={<Navigate to="/pipeline?setup=1" replace />} />
+        {/* The board is a view of Leads now; the old links keep working. */}
+        <Route path="pipeline" element={<Navigate to="/leads?view=board" replace />} />
+        <Route path="pipelines" element={<Navigate to="/leads?view=board&setup=1" replace />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="backup" element={<BackupPage />} />
       </Route>

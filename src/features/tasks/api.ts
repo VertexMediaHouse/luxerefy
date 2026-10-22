@@ -54,18 +54,20 @@ export function useSaveTask() {
         const existing = db.tasks.find(t => t.id === id)
         if (id && (!existing || !canSeeTask(user, existing))) throw new Error('Task not found')
         const now = new Date().toISOString()
+        const was = existing && { due_at: existing.due_at, ends_at: existing.ends_at }
         const task: Task = {
           ...(existing ?? { id: uid(), status: 'pending', created_by: user.id, created_at: now }),
           ...input,
           assigned_to: isManager(user) ? input.assigned_to : user.id, // RLS with-check: agents only schedule themselves
         }
         const clash = findClash(db, task)
-        if (clash) {
-          const who = db.profiles.find(p => p.id === task.assigned_to)?.full_name
-          throw new Error(`${who} already has "${clash.title}" at ${dateTime(clash.due_at)}. Pick another slot.`)
-        }
-        if (existing) Object.assign(existing, task)
-        else {
+        if (clash) throw new Error(`That slot is already booked — "${clash.title}" at ${dateTime(clash.due_at)}. Pick another time.`)
+        if (existing) {
+          Object.assign(existing, task)
+          // A move is worth recording on the lead, so the timeline explains the new date.
+          if (was && (was.due_at !== task.due_at || was.ends_at !== task.ends_at) && task.lead_id)
+            logActivity(db, task.lead_id, 'follow_up', `Rescheduled: ${task.title} — ${dateTime(was.due_at)} → ${dateTime(task.due_at)}`, user.id, now)
+        } else {
           db.tasks.push(task)
           if (task.lead_id) logActivity(db, task.lead_id, 'follow_up', `Scheduled: ${task.title} — ${dateTime(task.due_at)}`, user.id, now)
         }
@@ -83,7 +85,7 @@ export function useSetTaskStatus() {
         if (!t || !canSeeTask(user, t)) throw new Error('Task not found')
         // Reopening a slot re-checks the exclusion constraint.
         const clash = status !== 'cancelled' && findClash(db, { ...t, status })
-        if (clash) throw new Error(`Slot now clashes with "${clash.title}"`)
+        if (clash) throw new Error(`Reopening this clashes with "${clash.title}". Move one of them first.`)
         t.status = status
         if (t.lead_id && status === 'done') logActivity(db, t.lead_id, 'follow_up', `Completed: ${t.title}`, user.id, new Date().toISOString())
       }),

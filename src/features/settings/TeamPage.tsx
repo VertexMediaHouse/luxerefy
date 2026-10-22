@@ -14,7 +14,7 @@ export function TeamPage() {
 
   return (
     <>
-      <PageHeader icon={UserCog} tint="text-violet-500" title="Team and roles" subtitle={isOwner ? 'Set who is an owner, manager or agent. Agents only see their own leads.' : 'Only the owner can change roles.'} />
+      <PageHeader icon={UserCog} title="Team and roles" subtitle={isOwner ? 'Set who is an owner, manager or agent. Agents only see their own leads.' : 'Only the owner can change roles.'} />
       <ErrorText error={update.error} />
       <Card className="mt-2">
         <div className="overflow-x-auto">

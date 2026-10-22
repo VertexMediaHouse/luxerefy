@@ -42,8 +42,7 @@ export function useContact(id: string) {
         ...c,
         leads: leads.map(l => ({
           ...l,
-          property: db.properties.find(p => p.id === l.property_id) ?? null,
-          agent: db.profiles.find(p => p.id === l.assigned_to)?.full_name ?? null,
+          property: db.properties.find(p => p.id === l.property_ids[0]) ?? null,
         })),
         feed: activityFeed(new Set(leads.map(l => l.id)), 30),
       })

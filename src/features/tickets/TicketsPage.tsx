@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { AlertTriangle, CircleDot, LifeBuoy, Plus, Timer } from 'lucide-react'
-import { Avatar, Badge, Button, Card, Empty, ErrorText, Field, inputCls, Loading, Modal, PageHeader, RecordCount, T, Tabs, Toolbar } from '../../components/ui'
-import { useProfiles, useUser } from '../../lib/session'
-import { isManager, SLA_HOURS } from '../../lib/rules'
+import { Badge, Button, Card, Empty, ErrorText, Field, inputCls, Loading, Modal, PageHeader, RecordCount, T, Tabs, Toolbar } from '../../components/ui'
+import { SLA_HOURS } from '../../lib/rules'
 import { PRIORITY_LABEL, PRIORITY_TONE, TICKET_STATUS_LABEL, TICKET_STATUS_TONE } from '../../lib/labels'
 import { dateTime, duration, relative } from '../../lib/format'
 import type { TicketPriority, TicketStatus } from '../../lib/types'
@@ -26,7 +25,6 @@ export function Sla({ t }: { t: TicketRow }) {
 }
 
 export function TicketsPage() {
-  const user = useUser()
   const { data } = useTickets()
   const [tab, setTab] = useState<TicketStatus | 'all'>('all')
   const [raising, setRaising] = useState(false)
@@ -38,9 +36,9 @@ export function TicketsPage() {
 
   return (
     <>
-      <PageHeader icon={LifeBuoy} tint="text-rose-500"
+      <PageHeader icon={LifeBuoy}
         title="Tickets"
-        subtitle={isManager(user) ? 'Issues across the team, with SLA and auto-escalation' : 'Tickets you raised or are assigned to'}
+        subtitle="Raise an issue and it goes straight to the team, with an SLA clock on it"
         actions={<Button onClick={() => setRaising(true)}><Plus className="size-4" /> Raise ticket</Button>}
       />
       <Card>
@@ -59,7 +57,6 @@ export function TicketsPage() {
                 <th className={`${T.th} hidden lg:table-cell`}>SLA</th>
                 <th className={`${T.th} hidden md:table-cell`}>Priority</th>
                 <th className={T.th}>Status</th>
-                <th className={`${T.th} hidden md:table-cell`}>Assignee</th>
               </tr>
             </thead>
             <tbody className={T.body}>
@@ -73,9 +70,6 @@ export function TicketsPage() {
                   <td className={`${T.td} hidden lg:table-cell`}><Sla t={t} /></td>
                   <td className={`${T.td} hidden md:table-cell`}><Badge tone={PRIORITY_TONE[t.priority]}>{PRIORITY_LABEL[t.priority]}</Badge></td>
                   <td className={T.td}><Badge tone={TICKET_STATUS_TONE[t.status]}>{TICKET_STATUS_LABEL[t.status]}</Badge></td>
-                  <td className={`${T.td} hidden md:table-cell`}>
-                    {t.assignee_name ? <span className="flex items-center gap-2 whitespace-nowrap text-slate-700"><Avatar name={t.assignee_name} size="sm" />{t.assignee_name}</span> : <span className="text-slate-400">Unassigned</span>}
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -91,8 +85,6 @@ export function TicketsPage() {
 }
 
 function TicketDetail({ t }: { t: TicketRow }) {
-  const user = useUser()
-  const { data: profiles } = useProfiles()
   const update = useUpdateTicket()
   const steps = [
     { at: t.created_at, label: `Raised by ${t.raised_by_name}` },
@@ -112,17 +104,6 @@ function TicketDetail({ t }: { t: TicketRow }) {
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         {t.lead_id && <div><dt className="text-xs text-slate-500">Lead</dt><dd><Link to={`/leads/${t.lead_id}`} className="font-semibold text-blue-700 hover:underline">{t.lead_name}</Link></dd></div>}
         {t.property_id && <div><dt className="text-xs text-slate-500">Property</dt><dd><Link to={`/properties/${t.property_id}`} className="font-semibold text-blue-700 hover:underline">{t.property_title}</Link></dd></div>}
-        <div>
-          <dt className="text-xs text-slate-500">Assigned to</dt>
-          <dd>
-            {isManager(user) ? (
-              <select value={t.assigned_to ?? ''} onChange={e => update.mutate({ id: t.id, assigned_to: e.target.value || null })} className={`${inputCls} mt-1 py-1.5`} aria-label="Assign ticket">
-                <option value="">Unassigned</option>
-                {profiles.filter(p => p.active).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-              </select>
-            ) : <span className="font-semibold">{t.assignee_name ?? 'Unassigned'}</span>}
-          </dd>
-        </div>
         <div><dt className="text-xs text-slate-500">SLA due</dt><dd className="font-semibold">{dateTime(t.sla_due_at)}</dd></div>
       </dl>
       <ol className="space-y-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-900/[0.05]">
@@ -144,10 +125,8 @@ function TicketDetail({ t }: { t: TicketRow }) {
 }
 
 function RaiseForm({ onDone }: { onDone: () => void }) {
-  const user = useUser()
   const { data: leads = [] } = useLeads()
   const { data: properties = [] } = useProperties()
-  const { data: profiles } = useProfiles()
   const create = useCreateTicket()
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
@@ -155,7 +134,7 @@ function RaiseForm({ onDone }: { onDone: () => void }) {
     const f = new FormData(e.currentTarget)
     const s = (k: string) => String(f.get(k) ?? '').trim()
     create.mutate(
-      { title: s('title'), description: s('description'), priority: s('priority') as TicketPriority, lead_id: s('lead_id') || null, property_id: s('property_id') || null, assigned_to: s('assigned_to') || null },
+      { title: s('title'), description: s('description'), priority: s('priority') as TicketPriority, lead_id: s('lead_id') || null, property_id: s('property_id') || null },
       { onSuccess: onDone },
     )
   }
@@ -169,14 +148,7 @@ function RaiseForm({ onDone }: { onDone: () => void }) {
           {(Object.keys(SLA_HOURS) as TicketPriority[]).map(p => <option key={p} value={p}>{PRIORITY_LABEL[p]} — {SLA_HOURS[p]}h SLA</option>)}
         </select>
       </Field>
-      {isManager(user) ? (
-        <Field label="Assign to">
-          <select name="assigned_to" defaultValue="" className={inputCls}>
-            <option value="">Unassigned</option>
-            {profiles.filter(p => p.active).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-          </select>
-        </Field>
-      ) : <p className="self-end pb-2 text-xs text-slate-500">A manager will pick this up.</p>}
+      <p className="self-end pb-2 text-xs text-slate-500">Goes to the team automatically — nothing to assign.</p>
       <Field label="Related lead">
         <select name="lead_id" defaultValue="" className={inputCls}>
           <option value="">None</option>

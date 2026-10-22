@@ -1,19 +1,19 @@
 import { Link } from 'react-router'
-import { ArrowRightLeft, CalendarClock, MessageCircle, MessageSquareText, Phone, Sparkles, StickyNote, UserCheck, Activity } from 'lucide-react'
+import { ArrowRightLeft, CalendarClock, MessageSquare, MessageSquareText, Phone, Sparkles, StickyNote, UserCheck, Activity } from 'lucide-react'
 import type { ActivityType } from '../../lib/types'
 import { dateTime, relative } from '../../lib/format'
 import { Empty } from '../../components/ui'
 import type { FeedItem } from './api'
 
 const ICON: Record<ActivityType, [typeof Phone, string]> = {
-  created: [Sparkles, 'bg-blue-100 text-blue-700'],
-  enquiry: [MessageSquareText, 'bg-violet-100 text-violet-700'],
-  call: [Phone, 'bg-emerald-100 text-emerald-700'],
-  whatsapp: [MessageCircle, 'bg-green-100 text-green-700'],
-  note: [StickyNote, 'bg-amber-100 text-amber-700'],
-  status_change: [ArrowRightLeft, 'bg-sky-100 text-sky-700'],
+  created: [Sparkles, 'bg-blue-50 text-blue-700'],
+  enquiry: [MessageSquareText, 'bg-sky-50 text-sky-700'],
+  call: [Phone, 'bg-blue-600 text-white'],
+  text: [MessageSquare, 'bg-blue-100 text-blue-800'],
+  note: [StickyNote, 'bg-slate-100 text-slate-600'],
+  status_change: [ArrowRightLeft, 'bg-ink text-white'],
   assignment: [UserCheck, 'bg-slate-100 text-slate-600'],
-  follow_up: [CalendarClock, 'bg-indigo-100 text-indigo-700'],
+  follow_up: [CalendarClock, 'bg-blue-100 text-blue-800'],
 }
 
 export function ActivityTimeline({ items, showLead }: { items: FeedItem[]; showLead?: boolean }) {

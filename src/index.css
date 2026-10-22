@@ -1,48 +1,72 @@
 @import "tailwindcss";
 
-/* Soft workspace look: neutral greys (slate remapped to zinc), soft shadows, ink primary buttons, violet accent (blue remapped). */
+/*
+  Blue is the single accent: `blue-*` is the vivid ramp and `slate-*` the cool neutrals,
+  so no component names a colour of its own. Green and red stay reserved — green means
+  won, red means lost or overdue, and nothing else is allowed to use them.
+*/
 @theme {
-  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Geist", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-brand: "Cinzel", Georgia, serif;
-  --color-navy: #0b2545;
-  --color-navy-2: #13315c;
-  --color-ink: #18181b;
-  --color-brass: #b8923f;
-  --color-canvas: #fafafa;
 
-  --color-slate-50: #fafafa;
-  --color-slate-100: #f4f4f5;
-  --color-slate-200: #e4e4e7;
-  --color-slate-300: #d4d4d8;
-  --color-slate-400: #a1a1aa;
-  --color-slate-500: #71717a;
-  --color-slate-600: #52525b;
-  --color-slate-700: #3f3f46;
-  --color-slate-800: #27272a;
-  --color-slate-900: #18181b;
+  --color-ink: #0e1420;        /* sidebar and hero cards */
+  --color-ink-2: #161e2e;      /* raised surface on ink */
+  --color-canvas: #f4f7fc;     /* the content area inside the window */
 
-  --color-blue-50: #f4f1fe;
-  --color-blue-100: #ebe5fd;
-  --color-blue-200: #d8cdfb;
-  --color-blue-300: #bba8f8;
-  --color-blue-400: #9c7ff3;
-  --color-blue-500: #8160ee;
-  --color-blue-600: #6e47e6;
-  --color-blue-700: #5d38cc;
-  --color-blue-800: #4c2fa6;
-  --color-blue-900: #3f2a84;
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #eef2f8;
+  --color-slate-200: #e0e7f0;
+  --color-slate-300: #cbd5e3;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #6b7688;
+  --color-slate-600: #556070;
+  --color-slate-700: #3e4859;
+  --color-slate-800: #28303d;
+  --color-slate-900: #161c27;
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.03), 0 2px 8px -2px rgb(0 0 0 / 0.06);
-  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.05);
-  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.04), 0 8px 20px -6px rgb(0 0 0 / 0.1);
-  --shadow-pop: 0 16px 32px -12px rgb(0 0 0 / 0.18), 0 2px 6px -2px rgb(0 0 0 / 0.08);
+  --color-blue-50: #eef4ff;
+  --color-blue-100: #dbe7fe;
+  --color-blue-200: #bfd5fe;
+  --color-blue-300: #93b8fd;
+  --color-blue-400: #6093fa;
+  --color-blue-500: #3b7bf6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+  --color-blue-800: #1e40af;
+  --color-blue-900: #1b3691;
+
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+
+  --shadow-card: 0 1px 2px rgb(16 32 64 / 0.04), 0 1px 3px rgb(16 32 64 / 0.03);
+  --shadow-soft: 0 1px 2px rgb(16 32 64 / 0.05);
+  --shadow-lift: 0 1px 2px rgb(16 32 64 / 0.05), 0 8px 20px -8px rgb(16 32 64 / 0.14);
+  --shadow-pop: 0 14px 34px -12px rgb(8 18 40 / 0.26), 0 2px 6px -2px rgb(8 18 40 / 0.1);
+  --shadow-window: 0 30px 70px -24px rgb(4 12 36 / 0.62), 0 6px 18px -8px rgb(4 12 36 / 0.4);
 }
 
 body {
   background: var(--color-canvas);
   color: var(--color-slate-800);
   font-feature-settings: "tnum" 1;
+  letter-spacing: -0.011em;
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+  Eye-safety mode: a warm multiply wash, the same idea as Night Shift. An overlay rather than a
+  filter on an ancestor, so it can never become the containing block for anything positioned.
+*/
+html[data-eye="warm"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: #ff9b3d;
+  opacity: 0.13;
+  mix-blend-mode: multiply;
 }
 
 @media (prefers-reduced-motion: reduce) {

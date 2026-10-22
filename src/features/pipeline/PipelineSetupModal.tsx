@@ -19,13 +19,17 @@ import { useUser } from '../../lib/session'
 import type { Stage, Tone } from '../../lib/types'
 import { usePipelineActions, type PipelineRow } from './api'
 
+// Mirrors TONE_HEX in ui.tsx. The Tone keys are historic, so the picker names what it shows.
 const TONE_SWATCH: Record<Tone, string> = {
   slate: 'bg-slate-400',
-  blue: 'bg-sky-500',
-  violet: 'bg-violet-500',
-  amber: 'bg-amber-500',
+  blue: 'bg-blue-600',
+  violet: 'bg-blue-800',
+  amber: 'bg-sky-500',
   green: 'bg-emerald-500',
-  red: 'bg-rose-500',
+  red: 'bg-red-500',
+}
+const TONE_NAME: Record<Tone, string> = {
+  slate: 'Grey', blue: 'Blue', violet: 'Deep blue', amber: 'Sky', green: 'Green (won)', red: 'Red (lost)',
 }
 
 function TonePicker({ value, onChange }: { value: Tone; onChange: (t: Tone) => void }) {
@@ -37,7 +41,7 @@ function TonePicker({ value, onChange }: { value: Tone; onChange: (t: Tone) => v
           type="button"
           role="radio"
           aria-checked={t === value}
-          aria-label={t}
+          aria-label={TONE_NAME[t]}
           onClick={() => onChange(t)}
           className={`size-6 rounded-full ${TONE_SWATCH[t]} transition ${
             t === value ? 'ring-2 ring-slate-900 ring-offset-2' : 'opacity-60 hover:opacity-100'

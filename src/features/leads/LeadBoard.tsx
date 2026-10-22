@@ -6,7 +6,7 @@ import { SOURCE_LABEL } from '../../lib/labels'
 import { defaultPipeline, stagesOf, stageTone } from '../../lib/stages'
 import { budget, relative } from '../../lib/format'
 import type { LeadStatus } from '../../lib/types'
-import { useMoveLead, type LeadRow } from './api'
+import { interestOf, useMoveLead, type LeadRow } from './api'
 
 const cr = (n: number) => +(n / 1e7).toFixed(2)
 /** "₹2–2.5 Cr" when both ends are in crores, else the long form. */
@@ -42,7 +42,10 @@ function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDr
         <Avatar name={l.contact.name} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm leading-snug font-medium text-slate-900">{l.contact.name}</p>
-          <p className="truncate text-xs text-slate-400">{l.property?.title ?? l.property_interest ?? 'General enquiry'}</p>
+          <p className="truncate text-xs text-slate-400">
+            {interestOf(l) ?? 'General enquiry'}
+            {l.properties.length > 1 && <span className="text-slate-300"> +{l.properties.length - 1}</span>}
+          </p>
         </div>
         <p className="shrink-0 text-right text-[13px] font-medium text-slate-800 tabular-nums">{shortBudget(l.budget_min, l.budget_max)}</p>
       </div>
@@ -64,7 +67,6 @@ function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDr
         <span className="ml-auto flex shrink-0 items-center gap-2.5">
           <span className="flex items-center gap-1" title={`${l.activity_count} activities`}><MessageSquare className="size-3" /> {l.activity_count}</span>
           {l.doc_count > 0 && <span className="flex items-center gap-1" title={`${l.doc_count} documents`}><FileText className="size-3" /> {l.doc_count}</span>}
-          {l.agent && <span title={`Owner: ${l.agent.full_name}`}><Avatar name={l.agent.full_name} size="xs" /></span>}
         </span>
       </div>
     </Link>
@@ -130,8 +132,8 @@ export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages }: { 
                 {s.kind !== 'entry' && value > 0 && <span className="ml-auto shrink-0 text-xs text-slate-400 tabular-nums">{sum(value)}</span>}
               </header>
               <div
-                className={`space-y-2.5 rounded-2xl p-2 transition-colors ${
-                  active ? 'bg-slate-200/70 ring-1 ring-slate-300 ring-inset' : 'bg-slate-100/70'
+                className={`space-y-2.5 rounded-2xl p-2 ring-1 ring-inset transition-colors ${
+                  active ? 'bg-slate-200/80 ring-slate-300' : 'bg-slate-100 ring-slate-200/70'
                 }`}
               >
                 {shown.map(l => <LeadCard key={l.id} l={l} dragging={drag === l.id} onDrag={setDrag} />)}

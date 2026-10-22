@@ -1,10 +1,11 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { db, respond, write } from '../../lib/mock/db'
-import { canSeeLead, captureLead, isManager, isLost, isOpen, isWon, logActivity, parse99acres, uid, type CaptureInput } from '../../lib/rules'
+import { canSeeLead, captureLead, findClash, isLost, isOpen, isWon, logActivity, parse99acres, uid, type CaptureInput } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { stage, stageLabel } from '../../lib/stages'
 import { dateTime } from '../../lib/format'
-import type { Lead, LeadStatus, Profile } from '../../lib/types'
+import { TASK_KIND_LABEL } from '../../lib/labels'
+import type { Lead, LeadStatus, Profile, Property, TaskKind } from '../../lib/types'
 
 const byNewest = (a: { created_at: string }, b: { created_at: string }) => b.created_at.localeCompare(a.created_at)
 
@@ -12,15 +13,19 @@ function join(l: Lead) {
   return {
     ...l,
     contact: db.contacts.find(c => c.id === l.contact_id)!,
-    agent: db.profiles.find(p => p.id === l.assigned_to) ?? null,
-    property: db.properties.find(p => p.id === l.property_id) ?? null,
+    // A buyer is usually shown several places, so every linked property travels with the lead.
+    properties: l.property_ids.map(id => db.properties.find(p => p.id === id)).filter((p): p is Property => !!p),
     activity_count: db.lead_activities.filter(a => a.lead_id === l.id).length,
     doc_count: db.documents.filter(d => d.lead_id === l.id).length,
-    // The board card shows the next commitment, which is the thing an agent actually acts on.
+    // The board card shows the next commitment, which is the thing you actually act on.
     next_task: db.tasks.filter(t => t.lead_id === l.id && t.status === 'pending').sort((a, b) => a.due_at.localeCompare(b.due_at))[0] ?? null,
   }
 }
 export type LeadRow = ReturnType<typeof join>
+
+/** Headline for a lead in a list or card: the first property it is tied to, else free text. */
+export const interestOf = (l: Pick<LeadRow, 'properties' | 'property_interest'>) =>
+  l.properties[0]?.title ?? l.property_interest ?? null
 
 /** RLS stand-in: leads the user may see. */
 export const visibleLeads = (user: Profile) => db.leads.filter(l => canSeeLead(user, l))
@@ -50,10 +55,13 @@ export function useLead(id: string) {
     queryFn: () => {
       const l = db.leads.find(l => l.id === id)
       if (!l || !canSeeLead(user, l)) return respond(null)
+      const mine = db.tasks.filter(t => t.lead_id === id && t.status !== 'cancelled')
       return respond({
         ...join(l),
         activities: activityFeed(new Set([id])),
-        tasks: db.tasks.filter(t => t.lead_id === id && t.status === 'pending').sort((a, b) => a.due_at.localeCompare(b.due_at)),
+        // Split for the follow-up panel: what is still owed, and what has already happened.
+        tasks: mine.filter(t => t.status === 'pending').sort((a, b) => a.due_at.localeCompare(b.due_at)),
+        doneTasks: mine.filter(t => t.status === 'done').sort((a, b) => b.due_at.localeCompare(a.due_at)),
       })
     },
   })
@@ -128,8 +136,7 @@ export function useSimulate99acres() {
         try { payload = JSON.parse(raw) } catch { /* not JSON → treat as SMS text */ }
         const input = parse99acres(payload)
         if (!input) throw new Error('No phone number found in that message — the webhook would reject it (400).')
-        const { lead, created } = captureLead(db, input, null)
-        return { lead, created, agent: db.profiles.find(p => p.id === lead.assigned_to)?.full_name ?? 'Unassigned' }
+        return captureLead(db, input, null)
       }),
   })
 }
@@ -143,30 +150,52 @@ export function useLeadActions(id: string) {
         write(() => applyStatus(user, id, status, reason)),
     }),
     log: useMutation({
-      mutationFn: ({ type, body }: { type: 'call' | 'note'; body: string }) =>
+      mutationFn: ({ type, body }: { type: 'call' | 'note' | 'text'; body: string }) =>
         write(() => {
           ownLead(user, id).updated_at = now()
           logActivity(db, id, type, body, user.id, now())
         }),
     }),
-    assign: useMutation({
-      mutationFn: (agentId: string) =>
+    /** Free-text scratchpad. Replaces the whole field, so the textarea is the source of truth. */
+    saveNotes: useMutation({
+      mutationFn: (notes: string) =>
         write(() => {
-          if (!isManager(user)) throw new Error('Only owners and managers can reassign leads.')
           const l = ownLead(user, id)
-          l.assigned_to = agentId
-          logActivity(db, id, 'assignment', `Reassigned to ${db.profiles.find(p => p.id === agentId)?.full_name}`, user.id, now())
+          l.notes = notes
+          l.updated_at = now()
         }),
     }),
-    followUp: useMutation({
-      mutationFn: ({ title, due_at }: { title: string; due_at: string }) =>
+    /** Link or unlink the properties this buyer is being shown. */
+    setProperties: useMutation({
+      mutationFn: (property_ids: string[]) =>
         write(() => {
           const l = ownLead(user, id)
-          db.tasks.push({
-            id: uid(), title, kind: 'follow_up', lead_id: id, property_id: l.property_id, assigned_to: l.assigned_to ?? user.id,
-            due_at, ends_at: null, status: 'pending', created_by: user.id, created_at: now(),
-          })
-          logActivity(db, id, 'follow_up', `Follow-up scheduled: ${title} — ${dateTime(due_at)}`, user.id, now())
+          const before = new Set(l.property_ids)
+          l.property_ids = [...new Set(property_ids)].filter(pid => db.properties.some(p => p.id === pid))
+          l.updated_at = now()
+          const added = l.property_ids.filter(pid => !before.has(pid))
+          const removed = [...before].filter(pid => !l.property_ids.includes(pid))
+          const title = (pid: string) => db.properties.find(p => p.id === pid)?.title ?? pid
+          if (added.length) logActivity(db, id, 'note', `Property added: ${added.map(title).join(', ')}`, user.id, now())
+          if (removed.length) logActivity(db, id, 'note', `Property removed: ${removed.map(title).join(', ')}`, user.id, now())
+        }),
+    }),
+    /**
+     * Book the next action. A timed kind (meeting, site visit) takes a slot, so it is
+     * refused when it overlaps something already booked — same guard the calendar uses.
+     */
+    followUp: useMutation({
+      mutationFn: ({ title, kind, due_at, ends_at }: { title: string; kind: TaskKind; due_at: string; ends_at?: string | null }) =>
+        write(() => {
+          const l = ownLead(user, id)
+          const task = {
+            id: uid(), title, kind, lead_id: id, property_id: l.property_ids[0] ?? null, assigned_to: l.assigned_to ?? user.id,
+            due_at, ends_at: ends_at ?? null, status: 'pending' as const, created_by: user.id, created_at: now(),
+          }
+          const clash = findClash(db, task)
+          if (clash) throw new Error(`That slot is already taken by "${clash.title}" at ${dateTime(clash.due_at)}. Pick another time.`)
+          db.tasks.push(task)
+          logActivity(db, id, 'follow_up', `${TASK_KIND_LABEL[kind]} scheduled: ${title} — ${dateTime(due_at)}`, user.id, now())
         }),
     }),
     completeTask: useMutation({

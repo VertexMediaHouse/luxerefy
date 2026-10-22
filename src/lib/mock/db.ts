@@ -3,15 +3,15 @@ import type { Tables } from '../types'
 import { escalateTickets } from '../rules'
 import { seed } from './seed'
 
-export const KEY = 'luxerefy-crm-mock-v3'
+export const KEY = 'luxerefy-crm-mock-v4'
 
 function load(): Tables {
   try {
     const raw = localStorage.getItem(KEY)
-    // A store written before pipelines existed would render a blank board, so re-seed instead.
+    // A store written before pipelines or goals existed would render blank, so re-seed instead.
     if (raw) {
       const t = JSON.parse(raw) as Tables
-      if (t.pipelines?.length && t.stages?.length) return t
+      if (t.pipelines?.length && t.stages?.length && t.goals) return t
     }
   } catch { /* unreadable storage → fresh seed */ }
   return seed()
