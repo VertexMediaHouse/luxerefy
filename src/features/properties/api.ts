@@ -37,6 +37,37 @@ export function useSaveProperty() {
   })
 }
 
+export function useImportProperties() {
+  return useMutation({
+    mutationFn: (inputs: PropertyInput[]) =>
+      write(() => {
+        const now = new Date().toISOString()
+        let created = 0
+        const failed: { row: number; error: string }[] = []
+        inputs.forEach((input, i) => {
+          try {
+            if (!input.title?.trim()) throw new Error('Title is required')
+            const base = slugify(`${input.title} ${input.locality || ''}`) || 'property'
+            let slug = base
+            for (let k = 2; db.properties.some(p => p.slug === slug); k++) slug = `${base}-${k}`
+            const p: Property = {
+              ...input,
+              id: uid(),
+              slug,
+              created_at: now,
+              updated_at: now,
+            }
+            db.properties.push(p)
+            created++
+          } catch (e) {
+            failed.push({ row: i + 2, error: (e as Error).message })
+          }
+        })
+        return { created, failed }
+      }),
+  })
+}
+
 export function useDeleteProperty() {
   const user = useUser()
   return useMutation({

@@ -1,12 +1,13 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useParams } from 'react-router'
-import { BedDouble, Check, CheckCircle2, ChevronLeft, ChevronRight, MapPin, Ruler } from 'lucide-react'
+import { BedDouble, CheckCircle2, ChevronLeft, ChevronRight, MapPin, Ruler } from 'lucide-react'
 import { Button, Card, ErrorText, Field, inputCls, Loading } from '../../components/ui'
 import { Brand } from '../../components/Layout'
 import { PROPERTY_STATUS_LABEL } from '../../lib/labels'
 import { inr } from '../../lib/format'
 import type { Property } from '../../lib/types'
 import { usePublicProperty, useSubmitEnquiry } from './api'
+import { getAmenityIcon } from './amenities'
 
 export function PublicPropertyPage() {
   const { slug = '' } = useParams()
@@ -85,8 +86,18 @@ function Listing({ p }: { p: Property }) {
           )}
           {p.amenities.length > 0 && (
             <Section title="Amenities">
-              <ul className="grid gap-2.5 sm:grid-cols-2">
-                {p.amenities.map(a => <li key={a} className="flex items-center gap-2 text-slate-700"><span className="rounded-full bg-blue-50 p-1 text-blue-700"><Check className="size-3.5" /></span>{a}</li>)}
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {p.amenities.map(a => {
+                  const Icon = getAmenityIcon(a)
+                  return (
+                    <li key={a} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 text-slate-800 transition hover:bg-slate-50 hover:border-slate-200">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-700/10">
+                        <Icon className="size-4" />
+                      </span>
+                      <span className="text-sm font-medium">{a}</span>
+                    </li>
+                  )
+                })}
               </ul>
             </Section>
           )}

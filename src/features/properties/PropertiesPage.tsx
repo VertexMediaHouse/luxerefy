@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Building2, Check, Download, ExternalLink, ImageOff, Link2, Plus } from 'lucide-react'
-import { Badge, Button, buttonCls, Card, Empty, Loading, PageHeader, SearchBox, Segmented, Tabs, Toolbar, inlineInputCls } from '../../components/ui'
+import { Building2, Check, Download, ExternalLink, ImageOff, Link2, Plus, Share2, Upload } from 'lucide-react'
+import { Badge, Button, buttonCls, Card, Empty, Loading, PageHeader, SearchBox, Segmented, Tabs, inlineInputCls } from '../../components/ui'
 import { CATEGORIES, CATEGORY_LABEL, PROPERTY_STATUS_LABEL, PROPERTY_STATUS_TONE, SEGMENTS, SEGMENT_LABEL } from '../../lib/labels'
 import { inr } from '../../lib/format'
 import type { Property, PropertyCategory, PropertySegment, PropertyStatus } from '../../lib/types'
 import { shareUrl, useProperties } from './api'
+import { ImportPropertiesModal } from './ImportPropertiesModal'
+import { ShareCatalogueModal } from './ShareCatalogueModal'
 
 export function CopyLinkButton({ slug, className = '' }: { slug: string; className?: string }) {
   const [copied, setCopied] = useState(false)
@@ -44,6 +46,9 @@ export function PropertiesPage() {
   const [category, setCategory] = useState<PropertyCategory | 'all'>('all')
   const [showSold, setShowSold] = useState(false)
   const [q, setQ] = useState('')
+  const [importOpen, setImportOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+
   if (!data) return <Loading />
 
   const needle = q.toLowerCase()
@@ -56,44 +61,54 @@ export function PropertiesPage() {
 
   return (
     <>
-      <PageHeader icon={Building2} title="Properties" subtitle="One record per property, with a shareable page for clients" actions={<>
-        <Button variant="secondary" onClick={() => void exportProperties(rows)}><Download className="size-4" /> Export</Button>
+      <PageHeader
+        icon={Building2}
+        title="Properties"
+        tag={<span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">{rows.length} {status === 'all' ? 'total' : PROPERTY_STATUS_LABEL[status].toLowerCase()}</span>}
+        subtitle="One record per property, with a shareable page for clients"
+      />
+      <div className="-mt-3 mb-5 flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => setImportOpen(true)}><Upload className="size-4 text-slate-500" /> Import</Button>
+        <Button variant="secondary" onClick={() => void exportProperties(rows)}><Download className="size-4 text-slate-500" /> Export</Button>
         <Link to="/properties/new" className={buttonCls()}><Plus className="size-4" /> New property</Link>
-      </>} />
+        <Button variant="secondary" onClick={() => setShareOpen(true)}><Share2 className="size-4 text-slate-500" /> Share portfolio</Button>
+      </div>
 
-      <Card className="mb-5 [&>div]:border-0">
-        <Toolbar>
-          <div className="flex flex-wrap items-center gap-3">
-            <Segmented
-              label="Segment"
-              value={segment}
-              onChange={s => { setSegment(s); setCategory('all') }}
-              items={SEGMENTS.map(s => ({ value: s, label: SEGMENT_LABEL[s] }))}
-            />
-            <select
-              value={category}
-              onChange={e => setCategory(e.target.value as PropertyCategory | 'all')}
-              className={`${inlineInputCls} py-1 text-xs`}
-              aria-label="Filter properties by type"
-            >
-              <option value="all">All types</option>
-              {CATEGORIES.map(c => (
-                <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
-              ))}
-            </select>
-            <Tabs value={status} onChange={setStatus} items={[
-              { value: 'all', label: 'All', count: base.length },
-              ...(['available', 'reserved', 'sold'] as const).filter(s => showSold || s !== 'sold').map(s => ({ value: s, label: PROPERTY_STATUS_LABEL[s], count: base.filter(p => p.status === s).length })),
-            ]} />
-          </div>
-          <div className="flex items-center gap-3">
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
-              <input type="checkbox" checked={showSold} onChange={e => setShowSold(e.target.checked)} className="size-3.5 accent-blue-600" />
-              Show sold
-            </label>
-            <SearchBox value={q} onChange={setQ} placeholder="Search title, locality, BHK" label="Search properties" className="lg:w-72" />
-          </div>
-        </Toolbar>
+      <ImportPropertiesModal open={importOpen} onClose={() => setImportOpen(false)} />
+      <ShareCatalogueModal open={shareOpen} onClose={() => setShareOpen(false)} properties={data} />
+
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <Segmented
+          label="Segment"
+          value={segment}
+          onChange={s => { setSegment(s); setCategory('all') }}
+          items={SEGMENTS.map(s => ({ value: s, label: SEGMENT_LABEL[s] }))}
+        />
+        <select
+          value={category}
+          onChange={e => setCategory(e.target.value as PropertyCategory | 'all')}
+          className={inlineInputCls}
+          aria-label="Filter properties by type"
+        >
+          <option value="all">All types</option>
+          {CATEGORIES.map(c => (
+            <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
+          ))}
+        </select>
+        <SearchBox value={q} onChange={setQ} placeholder="Search title, locality, BHK" label="Search properties" className="w-full sm:w-72" />
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+          <input type="checkbox" checked={showSold} onChange={e => setShowSold(e.target.checked)} className="size-3.5 accent-blue-600" />
+          Show sold
+        </label>
+      </div>
+
+      <Card className="[&>div]:border-0">
+        <div className="border-b border-slate-100 px-4 pt-2">
+          <Tabs value={status} onChange={setStatus} items={[
+            { value: 'all', label: 'All', count: base.length },
+            ...(['available', 'reserved', 'sold'] as const).filter(s => showSold || s !== 'sold').map(s => ({ value: s, label: PROPERTY_STATUS_LABEL[s], count: base.filter(p => p.status === s).length })),
+          ]} />
+        </div>
       </Card>
       {rows.length ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{rows.map(p => <PropertyCard key={p.id} p={p} />)}</div>

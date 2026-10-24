@@ -7,7 +7,7 @@ import { toggleEyeSafe, useEyeSafe } from '../../lib/eyeSafe'
 import { db, resetDemo, save } from '../../lib/mock/db'
 
 const LINKS = [
-  { to: '/backup', icon: DatabaseBackup, label: 'Backups', hint: 'Weekly snapshots, download and restore' },
+  { to: '/backup', icon: DatabaseBackup, label: 'Backups', hint: 'Google Sheets sync, snapshots, download and restore' },
   { to: '/team', icon: UserCog, label: 'Team and roles', hint: 'Manage teams and module access' },
 ]
 

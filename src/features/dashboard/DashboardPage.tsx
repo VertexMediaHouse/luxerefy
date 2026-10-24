@@ -3,9 +3,9 @@ import { Link } from 'react-router'
 import { Activity, ArrowDownRight, ArrowUpRight, Building2, CalendarCheck, CalendarClock, CheckSquare, LifeBuoy, Target, TrendingUp, Users } from 'lucide-react'
 import { Badge, Button, Card, CardHeader, Empty, HeaderLink, Loading, PageHeader, Segmented, inlineInputCls } from '../../components/ui'
 import { useUser } from '../../lib/session'
-import { GOAL_PERIOD_LABEL, LEAD_CUTS, SEGMENTS, SEGMENT_LABEL, TASK_KIND_LABEL, type LeadCut } from '../../lib/labels'
+import { CATEGORIES, CATEGORY_LABEL, GOAL_PERIOD_LABEL, LEAD_CUTS, SEGMENTS, SEGMENT_LABEL, TASK_KIND_LABEL, type LeadCut } from '../../lib/labels'
 import { inr, shortDate } from '../../lib/format'
-import type { PropertySegment } from '../../lib/types'
+import type { PropertyCategory, PropertySegment } from '../../lib/types'
 import { ActivityTimeline } from '../leads/ActivityTimeline'
 import { useTasks, isOverdue } from '../tasks/api'
 import { useGoals, periodLabel } from '../goals/api'
@@ -139,6 +139,7 @@ export function DashboardPage() {
   const today = new Date()
   const [cut, setCut] = useState<LeadCut>('')
   const [segment, setSegment] = useState<PropertySegment>('residential')
+  const [selectedCategory, setSelectedCategory] = useState<PropertyCategory | 'all'>('all')
   const [selectedArea, setSelectedArea] = useState<string>('all')
   const [month, setMonth] = useState(today.getMonth())
   const [year, setYear] = useState(today.getFullYear())
@@ -152,9 +153,9 @@ export function DashboardPage() {
     p => p.segment === segment && (p.status === 'available' || p.status === 'reserved')
   )
   const areas = [...new Set(activeProperties.map(p => p.locality))].sort((a, b) => a.localeCompare(b))
-  const displayedProperties = (selectedArea === 'all' || !areas.includes(selectedArea))
-    ? activeProperties
-    : activeProperties.filter(p => p.locality === selectedArea)
+  const displayedProperties = activeProperties
+    .filter(p => selectedCategory === 'all' || p.category === selectedCategory)
+    .filter(p => selectedArea === 'all' || !areas.includes(selectedArea) || p.locality === selectedArea)
 
   const live = tasks.filter(t => t.status !== 'cancelled')
   const years = [...new Set([today.getFullYear(), ...live.map(t => new Date(t.due_at).getFullYear())])].sort((a, b) => b - a)
@@ -202,6 +203,7 @@ export function DashboardPage() {
                 onChange={e => {
                   setSegment(e.target.value as PropertySegment)
                   setSelectedArea('all')
+                  setSelectedCategory('all')
                 }}
                 className={`${inlineInputCls} py-1 text-xs`}
                 aria-label="Filter stock by segment"
@@ -243,9 +245,23 @@ export function DashboardPage() {
                 onChange={s => {
                   setSegment(s)
                   setSelectedArea('all')
+                  setSelectedCategory('all')
                 }}
                 items={SEGMENTS.map(s => ({ value: s, label: SEGMENT_LABEL[s] }))}
               />
+              <select
+                value={selectedCategory}
+                onChange={e => setSelectedCategory(e.target.value as PropertyCategory | 'all')}
+                className={`${inlineInputCls} py-1 text-xs`}
+                aria-label="Filter properties by type"
+              >
+                <option value="all">All types</option>
+                {CATEGORIES.map(c => (
+                  <option key={c} value={c}>
+                    {CATEGORY_LABEL[c]}
+                  </option>
+                ))}
+              </select>
               {areas.length > 0 && (
                 <select
                   value={areas.includes(selectedArea) ? selectedArea : 'all'}
@@ -270,7 +286,13 @@ export function DashboardPage() {
                 <PropertyCard key={p.id} p={p} />
               ))}
             </div>
-          ) : <Empty icon={Building2}>No active {SEGMENT_LABEL[segment].toLowerCase()} properties{selectedArea !== 'all' ? ` in ${selectedArea}` : ''}.</Empty>}
+          ) : (
+            <Empty icon={Building2}>
+              No active {SEGMENT_LABEL[segment].toLowerCase()} properties
+              {selectedCategory !== 'all' ? ` of type ${CATEGORY_LABEL[selectedCategory].toLowerCase()}` : ''}
+              {selectedArea !== 'all' ? ` in ${selectedArea}` : ''}.
+            </Empty>
+          )}
         </Card>
 
         <Card className="flex flex-col">

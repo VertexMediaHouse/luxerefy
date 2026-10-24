@@ -17,15 +17,51 @@ export const TABLES = [
 
 export interface BackupFile { version: number; taken_at: string; tables: Tables }
 
+export const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1ujrd3jGs16QELkn1yqR5xM8VTCYcbBaRGiH780UbBFg/edit'
+export const GOOGLE_SCRIPT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzp5XKxbhFneHORqL4FlfJ1HIUpy6rY_GauTS5av_nsaeEAQs7DibR-upff0TR0xMQ8/exec'
+
 export const takenAt = (key: string) => key.slice(PREFIX.length)
 
 /** Newest first. */
 export const listBackups = () => listFiles(PREFIX).then(keys => keys.sort().reverse())
 
+export async function syncToGoogleSheet() {
+  const payload = {
+    version: 3,
+    taken_at: new Date().toISOString(),
+    tables: db,
+  }
+
+  // Google Apps Script requires text/plain or no-cors with body string to avoid preflight issues
+  const res = await fetch(GOOGLE_SCRIPT_WEBAPP_URL, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  })
+
+  if (!res.ok) {
+    throw new Error(`Google Sheets backup returned status ${res.status}`)
+  }
+
+  const data = await res.json().catch(() => null)
+  if (data && data.status === 'error') {
+    throw new Error(data.message || 'Google Sheets sync failed')
+  }
+
+  localStorage.setItem('luxerefy_last_sheet_backup', new Date().toISOString())
+  return data
+}
+
+export function getLastSheetBackup(): string | null {
+  return localStorage.getItem('luxerefy_last_sheet_backup')
+}
+
 export async function takeBackup(at = new Date().toISOString()) {
   const body: BackupFile = { version: 3, taken_at: at, tables: db }
   await putFile(PREFIX + at, new Blob([JSON.stringify(body)], { type: 'application/json' }))
   for (const old of (await listBackups()).slice(KEEP)) await deleteFile(old)
+  // Background trigger Google Sheet backup sync without blocking
+  void syncToGoogleSheet().catch(err => console.warn('Background Google Sheet sync error:', err))
   return at
 }
 
@@ -72,16 +108,127 @@ export const downloadNow = () =>
     `luxerefy-backup-${new Date().toISOString().slice(0, 10)}.json`,
   )
 
+export async function downloadExcelBackup() {
+  const XLSX = await import('xlsx')
+  const wb = XLSX.utils.book_new()
+
+  for (const table of TABLES) {
+    const rows = (db[table] as unknown as Record<string, unknown>[]) || []
+    if (!rows || !rows.length) {
+      const ws = XLSX.utils.json_to_sheet([])
+      XLSX.utils.book_append_sheet(wb, ws, table)
+      continue
+    }
+
+    // Format complex objects and arrays into JSON strings for spreadsheet representation
+    const formattedRows = rows.map(r => {
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(r)) {
+        out[k] = v && typeof v === 'object' ? JSON.stringify(v) : v
+      }
+      return out
+    })
+
+    const ws = XLSX.utils.json_to_sheet(formattedRows)
+    XLSX.utils.book_append_sheet(wb, ws, table)
+  }
+
+  XLSX.writeFile(wb, `luxerefy-backup-${new Date().toISOString().slice(0, 10)}.xlsx`)
+}
+
+function parseCellValue(val: unknown) {
+  if (typeof val !== 'string') return val
+  const s = val.trim()
+  if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
+    try {
+      return JSON.parse(s)
+    } catch {
+      return val
+    }
+  }
+  return val
+}
+
 /**
- * Replace the whole store from a backup file. The file comes from outside the app, so its
- * shape is checked before anything is overwritten; the caller confirms with the user first.
+ * Replace the whole store from a backup file (.json, .xlsx, or single-table .csv).
  */
 export async function restoreBackup(file: File) {
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+
+  if (ext === '.xlsx' || ext === '.xls') {
+    const XLSX = await import('xlsx')
+    const buffer = await file.arrayBuffer()
+    const wb = XLSX.read(buffer, { type: 'array' })
+
+    const tables: Partial<Tables> = {}
+    for (const sheetName of wb.SheetNames) {
+      const normalizedName = sheetName.trim().toLowerCase()
+      const matchingTable = TABLES.find(t => t.toLowerCase() === normalizedName)
+      if (matchingTable) {
+        const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[sheetName], { defval: null })
+        const parsedRows = rawRows.map(r => {
+          const out: Record<string, unknown> = {}
+          for (const [k, v] of Object.entries(r)) {
+            out[k] = parseCellValue(v)
+          }
+          return out
+        })
+        tables[matchingTable] = parsedRows as never
+      }
+    }
+
+    // Fill any missing tables with current data to prevent crash
+    for (const t of TABLES) {
+      if (!Array.isArray(tables[t])) {
+        tables[t] = (db[t] ?? []) as never
+      }
+    }
+
+    if (!(tables.pipelines as unknown[])?.length && !(tables.leads as unknown[])?.length && !(tables.properties as unknown[])?.length) {
+      throw new Error('This spreadsheet has no recognized CRM sheets (e.g. leads, properties, contacts).')
+    }
+
+    localStorage.setItem(KEY, JSON.stringify(tables))
+    location.reload()
+    return
+  }
+
+  if (ext === '.csv') {
+    const XLSX = await import('xlsx')
+    const text = await file.text()
+    const wb = XLSX.read(text, { type: 'string' })
+    const firstSheet = wb.SheetNames[0]
+    if (!firstSheet) throw new Error('That CSV file has no data in it.')
+
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[firstSheet], { defval: null })
+    const parsedRows = rawRows.map(r => {
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(r)) {
+        out[k] = parseCellValue(v)
+      }
+      return out
+    })
+
+    // Detect which table this CSV belongs to by filename or columns
+    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').toLowerCase()
+    const targetTable = TABLES.find(t => nameWithoutExt.includes(t.toLowerCase()))
+
+    if (!targetTable) {
+      throw new Error(`Cannot detect which table this CSV belongs to. Please name the file after the table (e.g. leads.csv, properties.csv, contacts.csv).`)
+    }
+
+    const tables: Tables = { ...db, [targetTable]: parsedRows }
+    localStorage.setItem(KEY, JSON.stringify(tables))
+    location.reload()
+    return
+  }
+
+  // Otherwise handle JSON backup
   let parsed: unknown
   try {
     parsed = JSON.parse(await file.text())
   } catch {
-    throw new Error('That file is not valid JSON.')
+    throw new Error('That file is not valid JSON, Excel, or CSV.')
   }
   const tables = (parsed as Partial<BackupFile> | null)?.tables as Record<string, unknown> | undefined
   if (!tables || typeof tables !== 'object') throw new Error('That file is not a Luxerefy backup.')
