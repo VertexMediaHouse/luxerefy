@@ -22,9 +22,7 @@ import { GoalsPage } from './features/goals/GoalsPage'
 import { DocumentsPage } from './features/documents/DocumentsPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { user, loading } = useSession()
-  if (loading) return null
-  return user ? children : <Navigate to="/login" replace />
+  return useSession().user ? children : <Navigate to="/login" replace />
 }
 
 export function App() {

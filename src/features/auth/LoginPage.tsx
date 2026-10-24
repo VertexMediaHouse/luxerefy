@@ -1,29 +1,26 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router'
-import { useSession } from '../../lib/session'
-import { Button, ErrorText, Field, inputCls } from '../../components/ui'
+import { ArrowRight } from 'lucide-react'
+import { useProfiles, useSession } from '../../lib/session'
+import { ROLE_LABEL } from '../../lib/labels'
+import { Avatar, Button, ErrorText, Field, inputCls } from '../../components/ui'
 import { Brand } from '../../components/Layout'
 
 const HERO = 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&q=80&auto=format&fit=crop'
 
 export function LoginPage() {
   const { user, signIn } = useSession()
+  const { data: profiles } = useProfiles()
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
   if (user) return <Navigate to="/" replace />
 
-  const submit = async (e: FormEvent<HTMLFormElement>) => {
+  // Placeholder for supabase.auth.signInWithPassword: any password works for a demo email.
+  const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const form = new FormData(e.currentTarget)
-    setError('')
-    setBusy(true)
-    try {
-      await signIn(String(form.get('email')).trim().toLowerCase(), String(form.get('password')))
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setBusy(false)
-    }
+    const email = String(new FormData(e.currentTarget).get('email')).trim().toLowerCase()
+    const match = profiles.find(p => p.active && p.email === email)
+    if (match) signIn(match.id)
+    else setError('No account with that email. Use one of the demo accounts below.')
   }
 
   return (
@@ -46,10 +43,28 @@ export function LoginPage() {
 
           <form onSubmit={submit} className="mt-8 space-y-4">
             <Field label="Email"><input name="email" type="email" required autoComplete="email" className={inputCls} placeholder="you@luxerefy.com" /></Field>
-            <Field label="Password"><input name="password" type="password" required autoComplete="current-password" className={inputCls} placeholder="••••••••" /></Field>
+            <Field label="Password"><input name="password" type="password" autoComplete="current-password" className={inputCls} placeholder="••••••••" /></Field>
             <ErrorText error={error} />
-            <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
+            <Button type="submit" className="w-full">Sign in</Button>
           </form>
+
+          <div className="mt-10">
+            <p className="text-sm font-semibold text-slate-700">Or use the demo account</p>
+            <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-xl bg-white shadow-card ring-1 ring-slate-900/[0.07]">
+              {profiles.filter(p => p.active).map(p => (
+                <li key={p.id}>
+                  <button type="button" onClick={() => signIn(p.id)} className="group flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
+                    <Avatar name={p.full_name} size="sm" />
+                    <span className="flex-1">
+                      <span className="block text-sm font-semibold text-slate-900">{p.full_name}</span>
+                      <span className="block text-xs text-slate-500">{ROLE_LABEL[p.role]}, {p.email}</span>
+                    </span>
+                    <ArrowRight className="size-4 text-slate-300 group-hover:text-slate-900" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </div>

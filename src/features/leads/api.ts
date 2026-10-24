@@ -1,7 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { db, respond, write } from '../../lib/mock/db'
-import { supabase } from '../../lib/supabase'
-import { canSeeLead, findClash, isLost, isOpen, isWon, normalizePhone, parse99acres, uid, type CaptureInput } from '../../lib/rules'
+import { canSeeLead, captureLead, findClash, isLost, isOpen, isWon, logActivity, parse99acres, uid, type CaptureInput } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { stage, stageLabel } from '../../lib/stages'
 import { dateTime } from '../../lib/format'
@@ -28,7 +27,7 @@ export type LeadRow = ReturnType<typeof join>
 export const interestOf = (l: Pick<LeadRow, 'properties' | 'property_interest'>) =>
   l.properties[0]?.title ?? l.property_interest ?? null
 
-/** RLS already scopes `db.leads` to what this user may see; this filter is a harmless no-op on top. */
+/** RLS stand-in: leads the user may see. */
 export const visibleLeads = (user: Profile) => db.leads.filter(l => canSeeLead(user, l))
 
 export const activityFeed = (leadIds: Set<string>, limit?: number) =>
@@ -74,33 +73,24 @@ function ownLead(user: Profile, id: string) {
   return l
 }
 
-async function logActivity(lead_id: string, type: string, body: string, actor_id: string | null) {
-  const { error } = await supabase.from('lead_activities').insert({ lead_id, type, body, actor_id, meta: {} })
-  if (error) throw new Error(error.message)
-}
-
 /**
  * One stage change, shared by the detail page's stepper and the board's drag-and-drop.
  * Dropping onto another pipeline's column moves the lead to that pipeline too.
  */
-async function applyStatus(user: Profile, id: string, status: LeadStatus, reason?: string) {
+function applyStatus(user: Profile, id: string, status: LeadStatus, reason?: string) {
   const l = ownLead(user, id)
   if (l.status === status) return
+  const now = new Date().toISOString()
   // Mirrors the partial unique index: one open lead per contact.
   if (!isOpen(l) && isOpen({ status }) && db.leads.some(o => o.id !== id && o.contact_id === l.contact_id && isOpen(o)))
     throw new Error('This contact already has another open lead.')
-
-  const { error } = await supabase.from('leads').update({
+  logActivity(db, id, 'status_change', `Stage changed from ${stageLabel(l.status)} to ${stageLabel(status)}${reason ? ` — ${reason}` : ''}`, user.id, now)
+  Object.assign(l, {
     status, pipeline_id: stage(status)?.pipeline_id ?? l.pipeline_id,
-    lost_reason: isLost({ status }) ? reason ?? null : null,
-  }).eq('id', id)
-  if (error) throw new Error(error.message)
-  await logActivity(id, 'status_change', `Stage changed from ${stageLabel(l.status)} to ${stageLabel(status)}${reason ? ` — ${reason}` : ''}`, user.id)
-
-  if (isWon({ status })) {
-    const contact = db.contacts.find(c => c.id === l.contact_id)
-    if (contact?.kind === 'lead') await supabase.from('contacts').update({ kind: 'client' }).eq('id', contact.id)
-  }
+    lost_reason: isLost({ status }) ? reason ?? null : null, updated_at: now,
+  })
+  const contact = db.contacts.find(c => c.id === l.contact_id)
+  if (isWon({ status }) && contact?.kind === 'lead') contact.kind = 'client'
 }
 
 /** Board drag-and-drop. Separate from useLeadActions because the card is not the open lead. */
@@ -111,138 +101,111 @@ export function useMoveLead() {
   })
 }
 
-function captureLeadParams(input: CaptureInput, actorId: string | null) {
-  return {
-    p_name: input.name, p_phone: input.phone, p_source: input.source, p_email: input.email ?? null,
-    p_property_ids: input.property_ids?.length ? input.property_ids : null, p_pipeline_id: input.pipeline_id ?? null,
-    p_property_interest: input.property_interest ?? null, p_budget_min: input.budget_min ?? null, p_budget_max: input.budget_max ?? null,
-    p_city: input.city ?? null, p_external_ref: input.external_ref ?? null, p_referral_detail: input.referral_detail ?? null,
-    p_message: input.message ?? null, p_notes: input.notes ?? null, p_actor_id: actorId,
-  }
-}
-
 export function useCreateLead() {
   const user = useUser()
-  return useMutation({
-    mutationFn: (input: CaptureInput) =>
-      write(async () => {
-        const { data, error } = await supabase.rpc('capture_lead', captureLeadParams(input, user.id))
-        if (error) throw new Error(error.message)
-        return data
-      }),
-  })
+  return useMutation({ mutationFn: (input: CaptureInput) => write(() => captureLead(db, input, user)) })
 }
 
 /**
- * Bulk import. capture_lead already dedupes by phone and logs the activity, so a sheet row
+ * Bulk import. captureLead already dedupes by phone and logs the activity, so a sheet row
  * takes the same path as a webhook lead: an existing open lead is merged, not duplicated.
+ * One write() for the whole file, so the store is saved once.
  */
 export function useImportLeads() {
   const user = useUser()
   return useMutation({
     mutationFn: (rows: CaptureInput[]) =>
-      write(async () => {
+      write(() => {
         let created = 0, merged = 0
         const failed: { row: number; error: string }[] = []
-        for (let i = 0; i < rows.length; i++) {
-          const input = rows[i]
-          try {
-            const phone = normalizePhone(input.phone)
-            const hadOpenLead = !!phone && db.contacts.some(c => c.phone === phone && db.leads.some(l => l.contact_id === c.id && isOpen(l)))
-            const { error } = await supabase.rpc('capture_lead', captureLeadParams(input, user.id))
-            if (error) throw new Error(error.message)
-            hadOpenLead ? merged++ : created++
-          } catch (e) { failed.push({ row: i + 2, error: (e as Error).message }) }
-        }
+        rows.forEach((input, i) => {
+          try { captureLead(db, input, user).created ? created++ : merged++ }
+          catch (e) { failed.push({ row: i + 2, error: (e as Error).message }) }
+        })
         return { created, merged, failed }
       }),
   })
 }
 
-/** Simulates POST /functions/v1/99acres-webhook: processed as the system, not the signed-in user. */
+/** Mock of POST /functions/v1/99acres-webhook: the payload is processed as the system, not the signed-in user. */
 export function useSimulate99acres() {
   return useMutation({
     mutationFn: (raw: string) =>
-      write(async () => {
+      write(() => {
         let payload: unknown = raw
         try { payload = JSON.parse(raw) } catch { /* not JSON → treat as SMS text */ }
         const input = parse99acres(payload)
         if (!input) throw new Error('No phone number found in that message — the webhook would reject it (400).')
-        const { data, error } = await supabase.rpc('capture_lead', captureLeadParams(input, null))
-        if (error) throw new Error(error.message)
-        return data
+        return captureLead(db, input, null)
       }),
   })
 }
 
 export function useLeadActions(id: string) {
   const user = useUser()
+  const now = () => new Date().toISOString()
   return {
     setStatus: useMutation({
-      mutationFn: ({ status, reason }: { status: LeadStatus; reason?: string }) => write(() => applyStatus(user, id, status, reason)),
+      mutationFn: ({ status, reason }: { status: LeadStatus; reason?: string }) =>
+        write(() => applyStatus(user, id, status, reason)),
     }),
     log: useMutation({
       mutationFn: ({ type, body }: { type: 'call' | 'note' | 'text'; body: string }) =>
-        write(async () => {
-          ownLead(user, id)
-          await supabase.from('leads').update({ updated_at: new Date().toISOString() }).eq('id', id)
-          await logActivity(id, type, body, user.id)
+        write(() => {
+          ownLead(user, id).updated_at = now()
+          logActivity(db, id, type, body, user.id, now())
         }),
     }),
     /** Free-text scratchpad. Replaces the whole field, so the textarea is the source of truth. */
     saveNotes: useMutation({
       mutationFn: (notes: string) =>
-        write(async () => {
-          ownLead(user, id)
-          const { error } = await supabase.from('leads').update({ notes }).eq('id', id)
-          if (error) throw new Error(error.message)
+        write(() => {
+          const l = ownLead(user, id)
+          l.notes = notes
+          l.updated_at = now()
         }),
     }),
     /** Link or unlink the properties this buyer is being shown. */
     setProperties: useMutation({
       mutationFn: (property_ids: string[]) =>
-        write(async () => {
+        write(() => {
           const l = ownLead(user, id)
           const before = new Set(l.property_ids)
-          const next = [...new Set(property_ids)].filter(pid => db.properties.some(p => p.id === pid))
-          const { error } = await supabase.from('leads').update({ property_ids: next }).eq('id', id)
-          if (error) throw new Error(error.message)
-          const added = next.filter(pid => !before.has(pid))
-          const removed = [...before].filter(pid => !next.includes(pid))
+          l.property_ids = [...new Set(property_ids)].filter(pid => db.properties.some(p => p.id === pid))
+          l.updated_at = now()
+          const added = l.property_ids.filter(pid => !before.has(pid))
+          const removed = [...before].filter(pid => !l.property_ids.includes(pid))
           const title = (pid: string) => db.properties.find(p => p.id === pid)?.title ?? pid
-          if (added.length) await logActivity(id, 'note', `Property added: ${added.map(title).join(', ')}`, user.id)
-          if (removed.length) await logActivity(id, 'note', `Property removed: ${removed.map(title).join(', ')}`, user.id)
+          if (added.length) logActivity(db, id, 'note', `Property added: ${added.map(title).join(', ')}`, user.id, now())
+          if (removed.length) logActivity(db, id, 'note', `Property removed: ${removed.map(title).join(', ')}`, user.id, now())
         }),
     }),
     /**
      * Book the next action. A timed kind (meeting, site visit) takes a slot, so it is
-     * refused when it overlaps something already booked — the EXCLUDE constraint backs this up server-side.
+     * refused when it overlaps something already booked — same guard the calendar uses.
      */
     followUp: useMutation({
       mutationFn: ({ title, kind, due_at, ends_at }: { title: string; kind: TaskKind; due_at: string; ends_at?: string | null }) =>
-        write(async () => {
+        write(() => {
           const l = ownLead(user, id)
-          const assigned_to = l.assigned_to ?? user.id
-          const candidate = { id: uid(), assigned_to, due_at, ends_at: ends_at ?? null, status: 'pending' as const }
-          const clash = findClash(db, candidate)
+          const task = {
+            id: uid(), title, kind, lead_id: id, property_id: l.property_ids[0] ?? null, assigned_to: l.assigned_to ?? user.id,
+            due_at, ends_at: ends_at ?? null, status: 'pending' as const, created_by: user.id, created_at: now(),
+          }
+          const clash = findClash(db, task)
           if (clash) throw new Error(`That slot is already taken by "${clash.title}" at ${dateTime(clash.due_at)}. Pick another time.`)
-          const { error } = await supabase.from('tasks').insert({
-            title, kind, lead_id: id, property_id: l.property_ids[0] ?? null, assigned_to,
-            due_at, ends_at: ends_at ?? null, status: 'pending', created_by: user.id,
-          })
-          if (error) throw new Error(error.message)
-          await logActivity(id, 'follow_up', `${TASK_KIND_LABEL[kind]} scheduled: ${title} — ${dateTime(due_at)}`, user.id)
+          db.tasks.push(task)
+          logActivity(db, id, 'follow_up', `${TASK_KIND_LABEL[kind]} scheduled: ${title} — ${dateTime(due_at)}`, user.id, now())
         }),
     }),
     completeTask: useMutation({
       mutationFn: (taskId: string) =>
-        write(async () => {
+        write(() => {
           ownLead(user, id)
           const t = db.tasks.find(t => t.id === taskId && t.lead_id === id)
           if (!t) throw new Error('Task not found')
-          const { error } = await supabase.from('tasks').update({ status: 'done' }).eq('id', taskId)
-          if (error) throw new Error(error.message)
-          await logActivity(id, 'follow_up', `Completed: ${t.title}`, user.id)
+          t.status = 'done'
+          logActivity(db, id, 'follow_up', `Completed: ${t.title}`, user.id, now())
         }),
     }),
   }
