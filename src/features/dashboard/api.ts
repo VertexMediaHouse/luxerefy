@@ -70,7 +70,7 @@ export function useDashboard() {
         won,
         conversion: leads.length ? won / leads.length : 0,
         openTickets: tickets.length,
-        breached: tickets.filter(t => Date.parse(t.sla_due_at) < now).length,
+        breached: tickets.filter(t => t.sla_due_at ? Date.parse(t.sla_due_at) < now : false).length,
         feed: activityFeed(new Set(leads.map(l => l.id)), 10),
       })
     },

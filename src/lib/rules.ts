@@ -57,6 +57,7 @@ export interface CaptureInput {
   pipeline_id?: string | null
   property_interest?: string | null; budget_min?: number | null; budget_max?: number | null; city?: string | null
   external_ref?: string | null; referral_detail?: string | null; message?: string | null; notes?: string | null
+  assigned_to?: string | null
 }
 
 /** 99acres arrives as JSON (lead push / email parser) or a raw SMS body (SMS forwarder app). */
@@ -116,10 +117,10 @@ export function captureLead(t: Tables, input: CaptureInput, actor: Profile | nul
     property_ids: (input.property_ids ?? []).filter(Boolean),
     property_interest: input.property_interest ?? null, budget_min: input.budget_min ?? null, budget_max: input.budget_max ?? null,
     city: input.city ?? null, external_ref: input.external_ref ?? null,
-    referral_detail: input.source === 'referral' ? input.referral_detail?.trim() || null : null,
+    referral_detail: (input.source === 'referral' || input.source === 'sales_form') ? input.referral_detail?.trim() || null : null,
     notes: input.notes?.trim() ?? '',
     lost_reason: null, created_at: at, updated_at: at,
-    assigned_to: owner?.id ?? null,
+    assigned_to: input.assigned_to || (owner?.id ?? null),
   }
   t.leads.push(lead)
   logActivity(t, lead.id, 'created', `Lead captured from ${via}`, actorId, at)
@@ -197,10 +198,10 @@ export function escalateTickets(t: Tables, at = new Date().toISOString()) {
   const owner = soleOwner(t)
   let changed = 0
   for (const tk of t.tickets) {
-    if (tk.status === 'resolved') continue
+    if (tk.status === 'resolved' || !tk.sla_due_at || !tk.priority) continue
     const over = Date.parse(at) - Date.parse(tk.sla_due_at)
     const level = over <= 0 ? 0 : over > SLA_HOURS[tk.priority] * 3600e3 ? 2 : 1
-    if (level <= tk.escalation_level) continue
+    if (level <= (tk.escalation_level ?? 0)) continue
     tk.escalation_level = level
     tk.escalated_at = at
     tk.assigned_to = owner?.id ?? tk.assigned_to

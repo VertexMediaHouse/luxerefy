@@ -1,12 +1,13 @@
 import { useState, type DragEvent } from 'react'
 import { Link } from 'react-router'
-import { Clock, FileText, MessageSquare, Plus } from 'lucide-react'
+import { Building2, CalendarCheck, Clock, FileText, MessageSquare, Phone, Plus, Trash2, Users } from 'lucide-react'
 import { Avatar, StageIcon, TONE_HEX } from '../../components/ui'
 import { SOURCE_LABEL } from '../../lib/labels'
 import { defaultPipeline, stagesOf, stageTone } from '../../lib/stages'
-import { budget, relative } from '../../lib/format'
+import { budget, prettyPhone, relative } from '../../lib/format'
 import type { LeadStatus } from '../../lib/types'
-import { interestOf, useMoveLead, type LeadRow } from './api'
+import { db } from '../../lib/mock/db'
+import { interestOf, useDeleteLead, useMoveLead, type LeadRow } from './api'
 
 const cr = (n: number) => +(n / 1e7).toFixed(2)
 /** "₹2–2.5 Cr" when both ends are in crores, else the long form. */
@@ -17,10 +18,32 @@ const sum = (n: number) => (n >= 1e7 ? `₹${(n / 1e7).toFixed(n >= 1e8 ? 0 : 1)
 
 const DAY = 86400e3
 
+const SOURCE_STYLE: Record<string, string> = {
+  sales_form: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+  '99acres': 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+  social_media: 'bg-purple-50 text-purple-700 ring-1 ring-purple-600/20',
+  referral: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
+  website: 'bg-cyan-50 text-cyan-700 ring-1 ring-cyan-600/20',
+  property_page: 'bg-sky-50 text-sky-700 ring-1 ring-sky-600/20',
+  walk_in: 'bg-slate-100 text-slate-700 ring-1 ring-slate-400/20',
+  other: 'bg-slate-50 text-slate-600 ring-1 ring-slate-300/20',
+}
+
+function TaskIcon({ kind }: { kind: string }) {
+  if (kind === 'call') return <Phone className="size-3 shrink-0" />
+  if (kind === 'site_visit') return <CalendarCheck className="size-3 shrink-0 text-emerald-600" />
+  if (kind === 'meeting') return <Users className="size-3 shrink-0 text-purple-600" />
+  if (kind === 'text') return <MessageSquare className="size-3 shrink-0" />
+  if (kind === 'documents') return <FileText className="size-3 shrink-0 text-amber-600" />
+  return <Clock className="size-3 shrink-0" />
+}
+
 function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDrag: (id: string | null) => void }) {
   const task = l.next_task
   const overdue = !!task && Date.parse(task.due_at) < Date.now()
   const idle = Math.floor((Date.now() - Date.parse(l.updated_at)) / DAY)
+  const assignee = l.assigned_to ? db.profiles.find(p => p.id === l.assigned_to) : null
+  const del = useDeleteLead()
 
   return (
     <Link
@@ -32,42 +55,141 @@ function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDr
         onDrag(l.id)
       }}
       onDragEnd={() => onDrag(null)}
-      className={`relative block cursor-grab overflow-hidden rounded-2xl bg-white p-3.5 pl-4 shadow-card ring-1 ring-slate-900/[0.04] transition active:cursor-grabbing ${
-        dragging ? 'scale-[0.98] opacity-40' : 'hover:shadow-lift hover:ring-slate-900/[0.07]'
+      className={`group relative block cursor-grab overflow-hidden rounded-xl bg-white p-3 pl-3.5 shadow-sm ring-1 ring-slate-200/80 transition active:cursor-grabbing hover:border-slate-300 hover:shadow-md ${
+        dragging ? 'scale-[0.98] opacity-40' : ''
       }`}
     >
       <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: TONE_HEX[stageTone(l.status)] }} aria-hidden />
 
+      {/* Header: Avatar, Name, Phone & Budget, Assignee */}
       <div className="flex items-start gap-2.5">
         <Avatar name={l.contact.name} size="sm" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm leading-snug font-medium text-slate-900">{l.contact.name}</p>
-          <p className="truncate text-xs text-slate-400">
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-xs font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
+            {l.contact.name}
+          </p>
+          <a
+            href={`tel:${l.contact.phone}`}
+            onClick={e => e.stopPropagation()}
+            className="mt-0.5 inline-flex items-center gap-1 truncate text-[10px] text-slate-500 hover:text-blue-600"
+            title="Call contact"
+          >
+            <Phone className="size-2.5 shrink-0 text-slate-400" />
+            <span className="truncate">{prettyPhone(l.contact.phone)}</span>
+          </a>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[12px] font-bold text-slate-900 tabular-nums">
+              {shortBudget(l.budget_min, l.budget_max)}
+            </span>
+            <button
+              type="button"
+              onClick={e => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (confirm(`Remove lead "${l.contact.name}"?`)) {
+                  del.mutate(l.id)
+                }
+              }}
+              className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-red-600 transition rounded hover:bg-red-50"
+              title="Remove lead"
+              aria-label="Remove lead"
+            >
+              <Trash2 className="size-3" />
+            </button>
+          </div>
+          {assignee && (
+            <span
+              title={`Assigned to ${assignee.full_name}`}
+              className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.2 text-[9px] font-medium text-slate-600 ring-1 ring-slate-200"
+            >
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+              {assignee.full_name.split(' ')[0]}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Property / Interest Mini Card */}
+      <div className="mt-2 flex items-center gap-2 rounded-lg bg-slate-50/80 p-1.5 text-xs text-slate-700">
+        {l.properties[0]?.images[0] ? (
+          <img
+            src={l.properties[0].images[0]}
+            alt=""
+            loading="lazy"
+            className="size-7 shrink-0 rounded object-cover shadow-2xs"
+          />
+        ) : (
+          <div className="flex size-7 shrink-0 items-center justify-center rounded bg-slate-200/70 text-slate-500">
+            <Building2 className="size-3.5" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-[11px] font-medium text-slate-800">
             {interestOf(l) ?? 'General enquiry'}
-            {l.properties.length > 1 && <span className="text-slate-300"> +{l.properties.length - 1}</span>}
+            {l.properties.length > 1 && <span className="font-normal text-slate-400"> +{l.properties.length - 1}</span>}
+          </p>
+          <p className="truncate text-[10px] text-slate-400">
+            {l.properties[0]?.locality || l.city || 'Ahmedabad'}
+            {l.properties[0]?.config ? ` · ${l.properties[0].config}` : ''}
           </p>
         </div>
-        <p className="shrink-0 text-right text-[13px] font-medium text-slate-800 tabular-nums">{shortBudget(l.budget_min, l.budget_max)}</p>
       </div>
 
-      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400">
-        <span className="rounded bg-slate-50 px-1.5 py-0.5 font-medium text-slate-500">{SOURCE_LABEL[l.source]}</span>
-        <span className="truncate">{relative(l.created_at)}</span>
-        {idle >= 7 && <span className="ml-auto shrink-0 font-medium text-amber-600" title={`No change in ${idle} days`}>{idle}d idle</span>}
-      </div>
-
-      <div className="mt-3 flex items-center gap-2.5 border-t border-slate-100 pt-2.5 text-[11px] text-slate-400">
-        {task ? (
-          <span className={`flex min-w-0 items-center gap-1 font-medium ${overdue ? 'text-red-500' : 'text-slate-500'}`} title={task.title}>
-            <Clock className="size-3 shrink-0" /> <span className="truncate">{relative(task.due_at)}</span>
-          </span>
-        ) : (
-          <span className="text-slate-300">No follow-up</span>
-        )}
-        <span className="ml-auto flex shrink-0 items-center gap-2.5">
-          <span className="flex items-center gap-1" title={`${l.activity_count} activities`}><MessageSquare className="size-3" /> {l.activity_count}</span>
-          {l.doc_count > 0 && <span className="flex items-center gap-1" title={`${l.doc_count} documents`}><FileText className="size-3" /> {l.doc_count}</span>}
+      {/* Source, Referral Attribution & Age */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+        <span className={`rounded px-1.5 py-0.5 font-medium ${SOURCE_STYLE[l.source] ?? SOURCE_STYLE.other}`}>
+          {SOURCE_LABEL[l.source] || l.source}
         </span>
+        {l.referral_detail && (
+          <span
+            className="truncate max-w-[90px] rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600"
+            title={l.referral_detail}
+          >
+            {l.referral_detail}
+          </span>
+        )}
+        <span className="ml-auto text-slate-400 text-[10px]">{relative(l.created_at)}</span>
+        {idle >= 5 && (
+          <span
+            className="rounded bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700 ring-1 ring-amber-500/20"
+            title={`No activity in ${idle} days`}
+          >
+            {idle}d idle
+          </span>
+        )}
+      </div>
+
+      {/* Footer: Follow-up task & Activity/Docs counter */}
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[10px] text-slate-400">
+        {task ? (
+          <div
+            className={`flex min-w-0 items-center gap-1 font-medium ${overdue ? 'text-red-600' : 'text-slate-600'}`}
+            title={`${task.title} (due ${relative(task.due_at)})`}
+          >
+            <TaskIcon kind={task.kind} />
+            <span className="truncate max-w-[110px]">{task.title}</span>
+            <span className={`shrink-0 text-[9px] ${overdue ? 'font-bold text-red-500' : 'text-slate-400'}`}>
+              · {relative(task.due_at)}
+            </span>
+          </div>
+        ) : (
+          <span className="text-[10px] text-slate-300">No follow-up</span>
+        )}
+
+        <div className="flex shrink-0 items-center gap-2 text-slate-400">
+          <span className="flex items-center gap-0.5" title={`${l.activity_count} activities`}>
+            <MessageSquare className="size-3 text-slate-400" />
+            <span className="tabular-nums font-medium">{l.activity_count}</span>
+          </span>
+          {l.doc_count > 0 && (
+            <span className="flex items-center gap-0.5 text-blue-600 font-medium" title={`${l.doc_count} documents`}>
+              <FileText className="size-3" />
+              <span className="tabular-nums">{l.doc_count}</span>
+            </span>
+          )}
+        </div>
       </div>
     </Link>
   )

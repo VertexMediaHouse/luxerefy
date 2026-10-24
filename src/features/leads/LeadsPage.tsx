@@ -11,6 +11,7 @@ import { interestOf, useLeads } from './api'
 import { LeadBoard } from './LeadBoard'
 import { NewLeadModal, SimulateWebhookModal } from './LeadModals'
 import { ImportLeadsModal } from './ImportModal'
+import { ShareFormModal } from './ShareFormModal'
 import { useProperties } from '../properties/api'
 import { usePipelines } from '../pipeline/api'
 import { PipelineSetupModal, type SavedKanbanView } from '../pipeline/PipelineSetupModal'
@@ -49,6 +50,7 @@ export function LeadsPage() {
   const [params, setParams] = useSearchParams()
   const [modal, setModal] = useState<'new' | 'webhook' | 'import' | null>(null)
   const [setupOpen, setSetupOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
   // Saved board layouts live in localStorage: they are one person's view preference, not CRM data.
   const [views, setViews] = useState<SavedKanbanView[]>(() => {
@@ -95,7 +97,7 @@ export function LeadsPage() {
         tag={<span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">{view === 'board' ? `${base.filter(isOpen).length} open` : `${leads.length} total`}</span>}
         subtitle="Every enquiry, as a list or a board. Drag a card between stages to move the lead along."
         actions={<>
-          <Button variant="secondary" onClick={() => { const u = `${location.origin}/sales-form`; navigator.clipboard.writeText(u).then(() => alert(`Link copied:\n${u}`)) }}><ExternalLink className="size-4 text-slate-500" /> Share form</Button>
+          <Button variant="secondary" onClick={() => setShareOpen(true)}><ExternalLink className="size-4 text-slate-500" /> Share form</Button>
           <Button variant="secondary" onClick={() => setSetupOpen(true)}><SlidersHorizontal className="size-4 text-slate-500" /> Customise pipeline</Button>
           <Button variant="secondary" onClick={() => setModal('import')}><Upload className="size-4 text-slate-500" /> Import</Button>
           <Button variant="secondary" onClick={() => void exportLeads(leads)}><Download className="size-4 text-slate-500" /> Export</Button>
@@ -198,6 +200,7 @@ export function LeadsPage() {
       <ImportLeadsModal open={modal === 'import'} onClose={() => setModal(null)} />
       <NewLeadModal open={modal === 'new'} onClose={() => setModal(null)} />
       <SimulateWebhookModal open={modal === 'webhook'} onClose={() => setModal(null)} />
+      <ShareFormModal open={shareOpen} onClose={() => setShareOpen(false)} />
       {pipeline && (
         <PipelineSetupModal
           open={setupOpen}

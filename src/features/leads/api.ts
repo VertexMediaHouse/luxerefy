@@ -141,6 +141,22 @@ export function useSimulate99acres() {
   })
 }
 
+export function useDeleteLead() {
+  const user = useUser()
+  return useMutation({
+    mutationFn: (id: string) =>
+      write(() => {
+        const l = ownLead(user, id)
+        db.leads = db.leads.filter(x => x.id !== id)
+        db.lead_activities = db.lead_activities.filter(a => a.lead_id !== id)
+        db.tasks = db.tasks.filter(t => t.lead_id !== id)
+        db.documents = db.documents.filter(d => d.lead_id !== id)
+        db.tickets = db.tickets.filter(t => t.lead_id !== id)
+        return l
+      }),
+  })
+}
+
 export function useLeadActions(id: string) {
   const user = useUser()
   const now = () => new Date().toISOString()

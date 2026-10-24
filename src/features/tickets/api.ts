@@ -1,10 +1,10 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cron, db, respond, write } from '../../lib/mock/db'
-import { canSeeTicket, slaDue, soleOwner, uid } from '../../lib/rules'
+import { canSeeTicket, soleOwner, uid } from '../../lib/rules'
 import { useUser } from '../../lib/session'
-import type { Profile, Ticket, TicketPriority, TicketStatus } from '../../lib/types'
+import type { Profile, Ticket, TicketStatus } from '../../lib/types'
 
-const name = (id: string | null) => db.profiles.find(p => p.id === id)?.full_name ?? null
+const name = (id?: string | null) => (id ? db.profiles.find(p => p.id === id)?.full_name ?? null : null)
 
 export const visibleTickets = (user: Profile) => {
   cron()
@@ -22,36 +22,48 @@ export function useTickets() {
           .map(t => ({
             ...t,
             raised_by_name: name(t.raised_by),
-            assignee_name: name(t.assigned_to),
-            lead_name: db.contacts.find(c => c.id === db.leads.find(l => l.id === t.lead_id)?.contact_id)?.name ?? null,
-            property_title: db.properties.find(p => p.id === t.property_id)?.title ?? null,
+            assignee_name: name(t.assigned_to ?? null),
           })),
       ),
   })
 }
 export type TicketRow = NonNullable<ReturnType<typeof useTickets>['data']>[number]
 
-/** A ticket is raised, not assigned: it lands on the one desk that works them. */
+/** A ticket is raised with subject (title) and body (description). */
 export function useCreateTicket() {
   const user = useUser()
+  const qc = useQueryClient()
   return useMutation({
-    mutationFn: (f: { title: string; description: string; priority: TicketPriority; lead_id: string | null; property_id: string | null }) =>
+    mutationFn: (f: { title: string; description: string }) =>
       write(() => {
-        if (!f.title.trim()) throw new Error('Give the ticket a title')
+        if (!f.title.trim()) throw new Error('Enter a subject')
+        if (!f.description.trim()) throw new Error('Enter a body description')
         const created_at = new Date().toISOString()
         const t: Ticket = {
-          ...f, id: uid(), number: Math.max(0, ...db.tickets.map(t => t.number)) + 1, status: 'pending', raised_by: user.id,
-          assigned_to: soleOwner(db)?.id ?? null, sla_due_at: slaDue(created_at, f.priority),
-          escalation_level: 0, escalated_at: null, in_progress_at: null, resolved_at: null, created_at,
+          id: uid(),
+          number: Math.max(0, ...db.tickets.map(t => t.number)) + 1,
+          title: f.title.trim(),
+          description: f.description.trim(),
+          status: 'pending',
+          raised_by: user.id,
+          assigned_to: soleOwner(db)?.id ?? null,
+          in_progress_at: null,
+          resolved_at: null,
+          created_at,
         }
         db.tickets.push(t)
         return t
       }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
   })
 }
 
 export function useUpdateTicket() {
   const user = useUser()
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status?: TicketStatus }) =>
       write(() => {
@@ -64,5 +76,10 @@ export function useUpdateTicket() {
           t.resolved_at = status === 'resolved' ? now : null
         }
       }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
   })
 }
+

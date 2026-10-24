@@ -5,7 +5,7 @@ export type { Tone }
 
 export const SOURCE_LABEL: Record<LeadSource, string> = {
   '99acres': '99acres', social_media: 'Social media', website: 'Website', property_page: 'Property page',
-  referral: 'Referral', walk_in: 'Walk-in', other: 'Other',
+  referral: 'Referral', walk_in: 'Walk-in', sales_form: 'Sales form', other: 'Other',
 }
 /** The three cuts the dashboard offers. `mine` is derived, not a source — see addedByMe in rules.ts. */
 export const LEAD_CUTS = [

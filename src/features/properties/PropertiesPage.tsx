@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { Building2, Check, Download, ExternalLink, ImageOff, Link2, Plus } from 'lucide-react'
-import { Badge, Button, buttonCls, Card, Empty, Loading, PageHeader, SearchBox, Segmented, Tabs, Toolbar } from '../../components/ui'
-import { CATEGORY_LABEL, PROPERTY_STATUS_LABEL, PROPERTY_STATUS_TONE, SEGMENTS, SEGMENT_LABEL } from '../../lib/labels'
+import { Badge, Button, buttonCls, Card, Empty, Loading, PageHeader, SearchBox, Segmented, Tabs, Toolbar, inlineInputCls } from '../../components/ui'
+import { CATEGORIES, CATEGORY_LABEL, PROPERTY_STATUS_LABEL, PROPERTY_STATUS_TONE, SEGMENTS, SEGMENT_LABEL } from '../../lib/labels'
 import { inr } from '../../lib/format'
-import type { Property, PropertySegment, PropertyStatus } from '../../lib/types'
+import type { Property, PropertyCategory, PropertySegment, PropertyStatus } from '../../lib/types'
 import { shareUrl, useProperties } from './api'
 
 export function CopyLinkButton({ slug, className = '' }: { slug: string; className?: string }) {
@@ -41,6 +41,7 @@ export function PropertiesPage() {
   const { data } = useProperties()
   const [status, setStatus] = useState<PropertyStatus | 'all'>('all')
   const [segment, setSegment] = useState<PropertySegment>('residential')
+  const [category, setCategory] = useState<PropertyCategory | 'all'>('all')
   const [showSold, setShowSold] = useState(false)
   const [q, setQ] = useState('')
   if (!data) return <Loading />
@@ -48,6 +49,7 @@ export function PropertiesPage() {
   const needle = q.toLowerCase()
   const base = data
     .filter(p => p.segment === segment)
+    .filter(p => category === 'all' || p.category === category)
     .filter(p => showSold || p.status !== 'sold')
     .filter(p => !needle || [p.title, p.locality, p.config, p.project].some(v => v.toLowerCase().includes(needle)))
   const rows = status === 'all' ? base : base.filter(p => p.status === status)
@@ -62,7 +64,23 @@ export function PropertiesPage() {
       <Card className="mb-5 [&>div]:border-0">
         <Toolbar>
           <div className="flex flex-wrap items-center gap-3">
-            <Segmented label="Segment" value={segment} onChange={setSegment} items={SEGMENTS.map(s => ({ value: s, label: SEGMENT_LABEL[s] }))} />
+            <Segmented
+              label="Segment"
+              value={segment}
+              onChange={s => { setSegment(s); setCategory('all') }}
+              items={SEGMENTS.map(s => ({ value: s, label: SEGMENT_LABEL[s] }))}
+            />
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value as PropertyCategory | 'all')}
+              className={`${inlineInputCls} py-1 text-xs`}
+              aria-label="Filter properties by type"
+            >
+              <option value="all">All types</option>
+              {CATEGORIES.map(c => (
+                <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
+              ))}
+            </select>
             <Tabs value={status} onChange={setStatus} items={[
               { value: 'all', label: 'All', count: base.length },
               ...(['available', 'reserved', 'sold'] as const).filter(s => showSold || s !== 'sold').map(s => ({ value: s, label: PROPERTY_STATUS_LABEL[s], count: base.filter(p => p.status === s).length })),
@@ -84,13 +102,13 @@ export function PropertiesPage() {
   )
 }
 
-function PropertyCard({ p }: { p: Property }) {
+export function PropertyCard({ p }: { p: Property }) {
   return (
     <Card className="group flex flex-col">
       <Link to={`/properties/${p.id}`} className="block flex-1">
         <div className="relative aspect-[16/10] overflow-hidden rounded-t-[11px] bg-slate-100">
           {p.images[0]
-            ? <img src={p.images[0]} alt="" loading="lazy" className="size-full object-cover" />
+            ? <img src={p.images[0]} alt="" loading="lazy" className="size-full object-cover transition-transform duration-300 group-hover:scale-105" />
             : <div className="flex size-full items-center justify-center text-slate-300"><ImageOff className="size-6" /></div>}
           <div className="absolute top-2.5 left-2.5 flex gap-1.5">
             <Badge tone={PROPERTY_STATUS_TONE[p.status]}>{PROPERTY_STATUS_LABEL[p.status]}</Badge>

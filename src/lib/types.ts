@@ -3,7 +3,7 @@ export type Role = 'owner' | 'manager' | 'agent'
 export type Tone = 'slate' | 'blue' | 'violet' | 'amber' | 'green' | 'red'
 /** A stage id, not a fixed set: pipelines and their stages are rows now. See `stages.ts`. */
 export type LeadStatus = string
-export type LeadSource = '99acres' | 'social_media' | 'website' | 'property_page' | 'referral' | 'walk_in' | 'other'
+export type LeadSource = '99acres' | 'social_media' | 'website' | 'property_page' | 'referral' | 'walk_in' | 'sales_form' | 'other'
 export type ActivityType = 'created' | 'enquiry' | 'call' | 'text' | 'note' | 'status_change' | 'assignment' | 'follow_up'
 export type PropertySegment = 'residential' | 'commercial'
 /** The five kinds the dashboard breaks each locality down by. Both segments use the same list. */
@@ -63,9 +63,10 @@ export interface Task {
 }
 
 export interface Ticket {
-  id: string; number: number; title: string; description: string; status: TicketStatus; priority: TicketPriority
-  lead_id: string | null; property_id: string | null; raised_by: string; assigned_to: string | null
-  sla_due_at: string; escalation_level: number; escalated_at: string | null
+  id: string; number: number; title: string; description: string; status: TicketStatus
+  priority?: TicketPriority; lead_id?: string | null; property_id?: string | null
+  raised_by: string; assigned_to?: string | null
+  sla_due_at?: string; escalation_level?: number; escalated_at?: string | null
   in_progress_at: string | null; resolved_at: string | null; created_at: string
 }
 

@@ -3,13 +3,15 @@ import { Link } from 'react-router'
 import { Activity, ArrowDownRight, ArrowUpRight, Building2, CalendarCheck, CalendarClock, CheckSquare, LifeBuoy, Target, TrendingUp, Users } from 'lucide-react'
 import { Badge, Button, Card, CardHeader, Empty, HeaderLink, Loading, PageHeader, Segmented, inlineInputCls } from '../../components/ui'
 import { useUser } from '../../lib/session'
-import { CATEGORY_LABEL, GOAL_PERIOD_LABEL, LEAD_CUTS, SEGMENTS, SEGMENT_LABEL, TASK_KIND_LABEL, type LeadCut } from '../../lib/labels'
+import { GOAL_PERIOD_LABEL, LEAD_CUTS, SEGMENTS, SEGMENT_LABEL, TASK_KIND_LABEL, type LeadCut } from '../../lib/labels'
 import { inr, shortDate } from '../../lib/format'
 import type { PropertySegment } from '../../lib/types'
 import { ActivityTimeline } from '../leads/ActivityTimeline'
 import { useTasks, isOverdue } from '../tasks/api'
 import { useGoals, periodLabel } from '../goals/api'
 import { GoalBar } from '../goals/GoalParts'
+import { useProperties } from '../properties/api'
+import { PropertyCard } from '../properties/PropertiesPage'
 import { useDashboard } from './api'
 
 type Icon = ComponentType<{ className?: string }>
@@ -29,24 +31,29 @@ function Sparkline({ values }: { values: number[] }) {
 
 /** `dark` turns a tile into the hero card — one per row, as in the reference layout. */
 function Kpi({ to, label, value, icon: I, foot, chart, control, dark }: { to?: string; label: string; value: string | number; icon: Icon; foot: React.ReactNode; chart?: React.ReactNode; control?: React.ReactNode; dark?: boolean }) {
-  const body = (
-    <>
-      <div className="flex items-center gap-2.5">
-        <I className={`size-4 ${dark ? 'text-blue-400' : 'text-blue-600'}`} />
-        <p className={`text-sm leading-tight ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
-        {control && <span className="ml-auto">{control}</span>}
+  const cls = `relative rounded-xl border p-4 transition sm:p-5 ${
+    dark
+      ? 'bg-ink border-slate-700 hover:border-slate-500'
+      : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/80'
+  } ${to ? 'group cursor-pointer' : ''}`
+
+  return (
+    <div className={cls}>
+      {to && <Link to={to} className="absolute inset-0 z-0 rounded-xl" aria-label={label} />}
+      <div className="relative z-10 pointer-events-none">
+        <div className="flex items-center gap-2.5">
+          <I className={`size-4 ${dark ? 'text-blue-400' : 'text-blue-600'}`} />
+          <p className={`text-sm leading-tight ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
+          {control && <span className="ml-auto pointer-events-auto" onClick={e => e.stopPropagation()}>{control}</span>}
+        </div>
+        <div className="mt-3 flex items-end justify-between gap-2">
+          <p className={`text-2xl font-semibold tracking-tight sm:text-3xl ${dark ? 'text-white' : 'text-slate-900'}`}>{value}</p>
+          {chart}
+        </div>
+        <div className={`mt-3 text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{foot}</div>
       </div>
-      <div className="mt-3 flex items-end justify-between gap-2">
-        <p className={`text-2xl font-semibold tracking-tight sm:text-3xl ${dark ? 'text-white' : 'text-slate-900'}`}>{value}</p>
-        {chart}
-      </div>
-      <div className={`mt-3 text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{foot}</div>
-    </>
+    </div>
   )
-  const cls = `rounded-xl border p-4 transition sm:p-5 ${dark ? 'bg-ink border-slate-700' : 'bg-white border-slate-200'}`
-  return to && !control
-    ? <Link to={to} className={`group ${cls} hover:bg-slate-50`}>{body}</Link>
-    : <div className={cls}>{body}</div>
 }
 
 function Delta({ now, prev, dark }: { now: number; prev: number; dark?: boolean }) {
@@ -128,17 +135,26 @@ export function DashboardPage() {
   const { data: d } = useDashboard()
   const { data: tasks } = useTasks()
   const { data: goals } = useGoals()
+  const { data: properties = [] } = useProperties()
   const today = new Date()
   const [cut, setCut] = useState<LeadCut>('')
   const [segment, setSegment] = useState<PropertySegment>('residential')
+  const [selectedArea, setSelectedArea] = useState<string>('all')
   const [month, setMonth] = useState(today.getMonth())
   const [year, setYear] = useState(today.getFullYear())
 
   if (!d || !tasks || !goals) return <Loading />
 
   const lead = d.cuts[cut]
-  const stock = d.stock.find(s => s.segment === segment)!
   const cutLabel = LEAD_CUTS.find(c => c.value === cut)!.label
+
+  const activeProperties = properties.filter(
+    p => p.segment === segment && (p.status === 'available' || p.status === 'reserved')
+  )
+  const areas = [...new Set(activeProperties.map(p => p.locality))].sort((a, b) => a.localeCompare(b))
+  const displayedProperties = (selectedArea === 'all' || !areas.includes(selectedArea))
+    ? activeProperties
+    : activeProperties.filter(p => p.locality === selectedArea)
 
   const live = tasks.filter(t => t.status !== 'cancelled')
   const years = [...new Set([today.getFullYear(), ...live.map(t => new Date(t.due_at).getFullYear())])].sort((a, b) => b - a)
@@ -162,6 +178,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
         <Kpi
           dark
+          to="/leads"
           label="Total leads"
           value={lead.count}
           icon={Users}
@@ -174,15 +191,28 @@ export function DashboardPage() {
           foot={<><Delta dark now={lead.thisWeek} prev={lead.lastWeek} />{lead.thisWeek} this week vs {lead.lastWeek} last, {cutLabel.toLowerCase()}</>}
         />
         <Kpi
+          to="/properties"
           label="Active properties"
-          value={stock.total}
+          value={activeProperties.length}
           icon={Building2}
           control={
-            <select value={segment} onChange={e => setSegment(e.target.value as PropertySegment)} className={`${inlineInputCls} py-1 text-xs`} aria-label="Filter stock by segment">
-              {SEGMENTS.map(s => <option key={s} value={s}>{SEGMENT_LABEL[s]}</option>)}
-            </select>
+            <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+              <select
+                value={segment}
+                onChange={e => {
+                  setSegment(e.target.value as PropertySegment)
+                  setSelectedArea('all')
+                }}
+                className={`${inlineInputCls} py-1 text-xs`}
+                aria-label="Filter stock by segment"
+              >
+                {SEGMENTS.map(s => <option key={s} value={s}>{SEGMENT_LABEL[s]}</option>)}
+              </select>
+            </div>
           }
-          foot={<>{inr(stock.value)} of {SEGMENT_LABEL[segment].toLowerCase()} stock across {stock.areas.length} {stock.areas.length === 1 ? 'area' : 'areas'}</>}
+          foot={<>
+            {inr(activeProperties.reduce((sum, p) => sum + p.price, 0))} of {SEGMENT_LABEL[segment].toLowerCase()} stock across {areas.length} {areas.length === 1 ? 'area' : 'areas'}
+          </>}
         />
         <Kpi
           to="/tasks"
@@ -196,7 +226,7 @@ export function DashboardPage() {
           label="Open tickets"
           value={d.openTickets}
           icon={LifeBuoy}
-          foot={d.breached ? <Badge tone="red">{d.breached} past SLA</Badge> : <Badge tone="green">Within SLA</Badge>}
+          foot={d.openTickets > 0 ? <Badge tone="blue">{d.openTickets} open</Badge> : <Badge tone="green">All clear</Badge>}
         />
       </div>
 
@@ -205,32 +235,42 @@ export function DashboardPage() {
           <CardHeader
             icon={Building2}
             title="Active properties by area"
-            subtitle={`${stock.total} ${SEGMENT_LABEL[segment].toLowerCase()}, available or reserved`}
-            action={<div className="flex items-center gap-2">
-              <Segmented label="Segment" value={segment} onChange={setSegment} items={SEGMENTS.map(s => ({ value: s, label: SEGMENT_LABEL[s] }))} />
+            subtitle={`${displayedProperties.length} ${SEGMENT_LABEL[segment].toLowerCase()}, available or reserved`}
+            action={<div className="flex flex-wrap items-center gap-2">
+              <Segmented
+                label="Segment"
+                value={segment}
+                onChange={s => {
+                  setSegment(s)
+                  setSelectedArea('all')
+                }}
+                items={SEGMENTS.map(s => ({ value: s, label: SEGMENT_LABEL[s] }))}
+              />
+              {areas.length > 0 && (
+                <select
+                  value={areas.includes(selectedArea) ? selectedArea : 'all'}
+                  onChange={e => setSelectedArea(e.target.value)}
+                  className={`${inlineInputCls} py-1 text-xs`}
+                  aria-label="Filter properties by area"
+                >
+                  <option value="all">All areas ({activeProperties.length})</option>
+                  {areas.map(a => (
+                    <option key={a} value={a}>
+                      {a} ({activeProperties.filter(p => p.locality === a).length})
+                    </option>
+                  ))}
+                </select>
+              )}
               <HeaderLink to="/properties">All properties</HeaderLink>
             </div>}
           />
-          {stock.areas.length ? (
-            <div className="grid gap-x-6 gap-y-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
-              {stock.areas.map(a => (
-                <div key={a.locality} className="rounded-lg bg-slate-50 p-3.5">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <h3 className="min-w-0 truncate text-sm font-semibold text-slate-900">{a.locality}</h3>
-                    <span className="shrink-0 text-sm font-semibold text-slate-900 tabular-nums">{a.total}</span>
-                  </div>
-                  <ul className="mt-2 space-y-1">
-                    {a.byCategory.map(c => (
-                      <li key={c.category} className="flex items-baseline justify-between gap-2 text-xs">
-                        <span className="min-w-0 truncate text-slate-600">{CATEGORY_LABEL[c.category]}</span>
-                        <span className="shrink-0 font-medium text-slate-800 tabular-nums">{c.count}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+          {displayedProperties.length ? (
+            <div className="grid gap-4 p-5 sm:grid-cols-2 max-h-[620px] overflow-y-auto">
+              {displayedProperties.map(p => (
+                <PropertyCard key={p.id} p={p} />
               ))}
             </div>
-          ) : <Empty icon={Building2}>No active {SEGMENT_LABEL[segment].toLowerCase()} stock.</Empty>}
+          ) : <Empty icon={Building2}>No active {SEGMENT_LABEL[segment].toLowerCase()} properties{selectedArea !== 'all' ? ` in ${selectedArea}` : ''}.</Empty>}
         </Card>
 
         <Card className="flex flex-col">
@@ -249,7 +289,7 @@ export function DashboardPage() {
             </select>
           </div>
           {ordered.length ? (
-            <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+            <ul className="max-h-152 divide-y divide-slate-100 overflow-y-auto">
               {ordered.map(t => {
                 const due = new Date(t.due_at)
                 const isToday = sameDay(due, today)

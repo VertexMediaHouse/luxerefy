@@ -1,13 +1,13 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router'
-import { Activity as ActivityIcon, Building2, CalendarPlus, Check, CheckCircle2, Clock, Hash, Home, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, Sparkles, StickyNote, Users, Wallet, X, XCircle } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router'
+import { Activity as ActivityIcon, Building2, CalendarPlus, Check, CheckCircle2, Clock, Hash, Home, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, Sparkles, StickyNote, Trash2, Users, Wallet, X, XCircle } from 'lucide-react'
 import { Avatar, Badge, Button, buttonCls, StageChip, StageIcon, Card, CardHeader, Empty, ErrorText, Field, HeaderLink, inlineInputCls, inputCls, Loading, Modal, PageHeader } from '../../components/ui'
 import { isLost, wonOf } from '../../lib/rules'
 import { NEXT_ACTIONS, SOURCE_LABEL, TASK_KIND_LABEL, TIMED_KINDS } from '../../lib/labels'
 import { stagesOf } from '../../lib/stages'
 import { budget, dateTime, prettyPhone, relative, toLocalInput } from '../../lib/format'
 import type { ActivityType, Task, TaskKind } from '../../lib/types'
-import { interestOf, useLead, useLeadActions } from './api'
+import { interestOf, useDeleteLead, useLead, useLeadActions } from './api'
 import { ActivityTimeline } from './ActivityTimeline'
 import { DocumentsPanel } from '../documents/DocumentParts'
 import { useProperties } from '../properties/api'
@@ -30,8 +30,10 @@ function Row({ icon: I, label, children }: { icon: typeof Phone; label: string; 
 
 export function LeadDetailPage() {
   const { id = '' } = useParams()
+  const nav = useNavigate()
   const { data: lead, isLoading } = useLead(id)
   const actions = useLeadActions(id)
+  const del = useDeleteLead()
   const [mode, setMode] = useState<Mode | null>(null)
   const [rescheduling, setRescheduling] = useState<Task | null>(null)
 
@@ -49,6 +51,17 @@ export function LeadDetailPage() {
           <Button variant="secondary" onClick={() => setMode('call')}><PhoneCall className="size-4" /> Log call</Button>
           <Button variant="secondary" onClick={() => setMode('text')}><MessageSquare className="size-4" /> Log text</Button>
           <Button variant="secondary" onClick={() => setMode('note')}><StickyNote className="size-4" /> Note</Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              if (confirm(`Are you sure you want to remove lead "${lead.contact.name}"?`)) {
+                del.mutate(lead.id, { onSuccess: () => nav('/leads') })
+              }
+            }}
+            className="text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
+          >
+            <Trash2 className="size-4" /> Remove
+          </Button>
         </>}
       />
 
