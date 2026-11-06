@@ -1,0 +1,7 @@
+# /api/webhooks/99acres -> 99acres.php (overrides the root SPA rewrite for this folder)
+RewriteEngine On
+RewriteRule ^99acres/?$ 99acres.php [L]
+
+<Files "config.php">
+  Require all denied
+</Files>

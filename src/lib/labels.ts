@@ -1,12 +1,16 @@
-import type { DocFolder, GoalMetric, GoalPeriod, LeadSource, PropertyCategory, PropertySegment, PropertyStatus, Role, TaskKind, TicketPriority, TicketStatus, Tone } from './types'
+import type { DocFolder, GoalMetric, GoalPeriod, LeadSource, LeadType, PropertyCategory, PropertySegment, PropertyStatus, Role, TaskKind, TicketPriority, TicketStatus, Tone } from './types'
 
 // Lead stages are no longer constants - they are rows a manager can edit. See ./stages.ts.
 export type { Tone }
 
 export const SOURCE_LABEL: Record<LeadSource, string> = {
-  '99acres': '99acres', social_media: 'Social media', website: 'Website', property_page: 'Property page',
+  '99acres': '99acres', social_media: 'Social media', website: 'Website', property_page: 'Property page', print_ad: 'Print Ad', jbn: 'JBN',
   referral: 'Referral', walk_in: 'Walk-in', sales_form: 'Sales form', other: 'Other',
 }
+export const LEAD_TYPE_LABEL: Record<LeadType, string> = {
+  apartment: 'Apartment', bungalow: 'Bungalow', villa: 'Villa', weekend_apartment: 'Weekend Apartment', weekend_villa: 'Weekend Villa',
+}
+export const LEAD_TYPES: LeadType[] = ['apartment', 'bungalow', 'villa', 'weekend_apartment', 'weekend_villa']
 /** The three cuts the dashboard offers. `mine` is derived, not a source — see addedByMe in rules.ts. */
 export const LEAD_CUTS = [
   { value: '', label: 'All leads' },
@@ -33,8 +37,8 @@ export const TICKET_STATUS_TONE: Record<TicketStatus, Tone> = { pending: 'amber'
 export const PRIORITY_LABEL: Record<TicketPriority, string> = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' }
 export const PRIORITY_TONE: Record<TicketPriority, Tone> = { low: 'slate', normal: 'blue', high: 'amber', urgent: 'red' }
 
-export const TASK_KIND_LABEL: Record<TaskKind, string> = { call: 'Call', text: 'Text', follow_up: 'Follow-up', site_visit: 'Site visit', meeting: 'Meeting', documents: 'Documents', approval: 'Approval', other: 'Other' }
-export const TASK_KIND_TONE: Record<TaskKind, Tone> = { call: 'blue', text: 'violet', follow_up: 'blue', site_visit: 'green', meeting: 'violet', documents: 'amber', approval: 'red', other: 'slate' }
+export const TASK_KIND_LABEL: Record<TaskKind, string> = { call: 'Call', text: 'Text', follow_up: 'Follow-up', site_visit: 'Site visit', meeting: 'Meeting', other: 'Other' }
+export const TASK_KIND_TONE: Record<TaskKind, Tone> = { call: 'blue', text: 'violet', follow_up: 'blue', site_visit: 'green', meeting: 'violet', other: 'slate' }
 /** Kinds that occupy a time slot and so need an end time (calendar + double-booking guard). */
 export const TIMED_KINDS: TaskKind[] = ['site_visit', 'meeting']
 /** Offered in the lead's "what next" picker, in the order they usually happen. */

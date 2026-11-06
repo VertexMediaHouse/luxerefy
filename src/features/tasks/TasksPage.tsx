@@ -390,7 +390,7 @@ export function TasksPage() {
     <>
       <PageHeader icon={CheckSquare}
         title="Tasks"
-        subtitle="Follow-ups, documents and approvals, split by where they stand"
+        subtitle="Follow-ups, meetings and site visits, split by where they stand"
         actions={<>
           <SearchBox value={q} onChange={setQ} placeholder="Search tasks" label="Search tasks" className="w-full sm:w-64" />
           <Button variant="secondary" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4 text-slate-500" /> Settings</Button>

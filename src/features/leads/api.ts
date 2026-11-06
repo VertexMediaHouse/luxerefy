@@ -5,7 +5,7 @@ import { useUser } from '../../lib/session'
 import { stage, stageLabel } from '../../lib/stages'
 import { dateTime } from '../../lib/format'
 import { TASK_KIND_LABEL } from '../../lib/labels'
-import type { Lead, LeadStatus, Profile, Property, TaskKind } from '../../lib/types'
+import type { Lead, LeadStatus, LeadType, Profile, Property, TaskKind } from '../../lib/types'
 
 const byNewest = (a: { created_at: string }, b: { created_at: string }) => b.created_at.localeCompare(a.created_at)
 
@@ -179,6 +179,42 @@ export function useLeadActions(id: string) {
           const l = ownLead(user, id)
           l.notes = notes
           l.updated_at = now()
+        }),
+    }),
+    /** Update profile and requirement details (looking for, locality, project, type, budget, etc). */
+    updateDetails: useMutation({
+      mutationFn: (data: {
+        property_interest?: string | null
+        locality?: string | null
+        project?: string | null
+        lead_type?: LeadType | null
+        budget_min?: number | null
+        budget_max?: number | null
+        city?: string | null
+        name?: string
+        phone?: string
+        email?: string | null
+      }) =>
+        write(() => {
+          const l = ownLead(user, id)
+          if (data.property_interest !== undefined) l.property_interest = data.property_interest
+          if (data.locality !== undefined) l.locality = data.locality
+          if (data.project !== undefined) l.project = data.project
+          if (data.lead_type !== undefined) l.lead_type = data.lead_type
+          if (data.budget_min !== undefined) l.budget_min = data.budget_min
+          if (data.budget_max !== undefined) l.budget_max = data.budget_max
+          if (data.city !== undefined) l.city = data.city
+          l.updated_at = now()
+
+          if (data.name !== undefined || data.phone !== undefined || data.email !== undefined) {
+            const contact = db.contacts.find(c => c.id === l.contact_id)
+            if (contact) {
+              if (data.name) contact.name = data.name
+              if (data.phone) contact.phone = data.phone
+              if (data.email !== undefined) contact.email = data.email
+            }
+          }
+          logActivity(db, id, 'note', 'Lead requirement details updated', user.id, now())
         }),
     }),
     /** Link or unlink the properties this buyer is being shown. */

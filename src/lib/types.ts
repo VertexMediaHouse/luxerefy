@@ -3,7 +3,8 @@ export type Role = 'owner' | 'manager' | 'agent'
 export type Tone = 'slate' | 'blue' | 'violet' | 'amber' | 'green' | 'red'
 /** A stage id, not a fixed set: pipelines and their stages are rows now. See `stages.ts`. */
 export type LeadStatus = string
-export type LeadSource = '99acres' | 'social_media' | 'website' | 'property_page' | 'referral' | 'walk_in' | 'sales_form' | 'other'
+export type LeadSource = '99acres' | 'social_media' | 'website' | 'property_page' | 'print_ad' | 'jbn' | 'referral' | 'walk_in' | 'sales_form' | 'other'
+export type LeadType = 'apartment' | 'bungalow' | 'villa' | 'weekend_apartment' | 'weekend_villa'
 export type ActivityType = 'created' | 'enquiry' | 'call' | 'text' | 'note' | 'status_change' | 'assignment' | 'follow_up'
 export type PropertySegment = 'residential' | 'commercial'
 /** The five kinds the dashboard breaks each locality down by. Both segments use the same list. */
@@ -11,7 +12,7 @@ export type PropertyCategory = 'apartment' | 'plot' | 'bungalow' | 'weekend_vill
 export type PropertyStatus = 'available' | 'reserved' | 'sold' | 'off_market'
 export type TicketStatus = 'pending' | 'in_progress' | 'resolved'
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent'
-export type TaskKind = 'call' | 'text' | 'follow_up' | 'site_visit' | 'meeting' | 'documents' | 'approval' | 'other'
+export type TaskKind = 'call' | 'text' | 'follow_up' | 'site_visit' | 'meeting' | 'other'
 export type GoalPeriod = 'weekly' | 'monthly' | 'yearly'
 export type GoalMetric = 'leads' | 'won' | 'revenue' | 'site_visits'
 
@@ -42,7 +43,8 @@ export interface Lead {
   id: string; contact_id: string; source: LeadSource; pipeline_id: string; status: LeadStatus
   /** A buyer usually tours several places, so interest is a list. First one is the headline. */
   property_ids: string[]
-  property_interest: string | null; budget_min: number | null; budget_max: number | null; city: string | null
+  property_interest: string | null; locality: string | null; project: string | null; lead_type: LeadType | null
+  budget_min: number | null; budget_max: number | null; city: string | null
   assigned_to: string | null; external_ref: string | null
   /** Who or which community sent a `referral` lead over. */
   referral_detail: string | null
@@ -76,14 +78,24 @@ export interface Goal {
   created_at: string; updated_at: string
 }
 
-export type DocFolder = 'Company Brochures' | 'General Documents' | 'Agreements' | 'KYC' | 'Other'
+export type DocFolder = string
+
+export interface DocFolderItem {
+  id: string
+  name: string
+  parent_id: string | null
+  color?: string
+  icon?: string
+  created_at: string
+}
 
 export interface Doc {
-  id: string; lead_id: string | null; property_id: string | null; folder: DocFolder; name: string
+  id: string; lead_id: string | null; property_id: string | null; folder: string; folder_id?: string | null; name: string
   size: number; mime: string; storage_path: string; uploaded_by: string | null; created_at: string
+  starred?: boolean
 }
 
 export interface Tables {
   profiles: Profile[]; contacts: Contact[]; properties: Property[]; pipelines: Pipeline[]; stages: Stage[]; leads: Lead[]
-  lead_activities: LeadActivity[]; tasks: Task[]; tickets: Ticket[]; documents: Doc[]; goals: Goal[]
+  lead_activities: LeadActivity[]; tasks: Task[]; tickets: Ticket[]; documents: Doc[]; doc_folders?: DocFolderItem[]; goals: Goal[]
 }

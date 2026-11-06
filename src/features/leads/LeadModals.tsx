@@ -2,8 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { CheckCircle2, Info } from 'lucide-react'
 import { Button, buttonCls, ErrorText, Field, inputCls, Modal } from '../../components/ui'
-import { SOURCE_LABEL } from '../../lib/labels'
-import type { Lead, LeadSource } from '../../lib/types'
+import { LEAD_TYPES, LEAD_TYPE_LABEL, SOURCE_LABEL } from '../../lib/labels'
+import type { Lead, LeadSource, LeadType } from '../../lib/types'
 import { useProperties } from '../properties/api'
 import { useCreateLead, useSimulate99acres } from './api'
 
@@ -35,6 +35,9 @@ function NewLeadForm({ onClose }: { onClose: () => void }) {
         name: s('name'), phone: s('phone'), email: s('email') || null, source,
         property_ids: picked,
         property_interest: s('property_interest') || (first ? `${first.config}, ${first.locality}` : null),
+        locality: s('locality') || (first ? first.locality : null),
+        project: s('project') || (first ? first.project : null),
+        lead_type: (s('lead_type') as LeadType) || null,
         budget_min: cr('budget_min'), budget_max: cr('budget_max'), city: s('city') || null,
         referral_detail: s('referral_detail') || null, notes: s('notes') || null, message: s('notes') || null,
       },
@@ -84,6 +87,16 @@ function NewLeadForm({ onClose }: { onClose: () => void }) {
         </div>
       </Field>
       <Field label="Looking for"><input name="property_interest" className={inputCls} placeholder="4 BHK in Bodakdev" /></Field>
+      <Field label="Locality"><input name="locality" className={inputCls} placeholder="e.g. Prahlad Nagar" /></Field>
+      <Field label="Project"><input name="project" className={inputCls} placeholder="e.g. Aurelia Residences" /></Field>
+      <Field label="Type">
+        <select name="lead_type" className={inputCls}>
+          <option value="">Select type...</option>
+          {LEAD_TYPES.map(t => (
+            <option key={t} value={t}>{LEAD_TYPE_LABEL[t]}</option>
+          ))}
+        </select>
+      </Field>
       <Field label="City"><input name="city" className={inputCls} defaultValue="Ahmedabad" /></Field>
       <Field label="Budget from (₹ Cr)"><input name="budget_min" type="number" min="0" step="0.1" className={inputCls} /></Field>
       <Field label="Budget to (₹ Cr)"><input name="budget_max" type="number" min="0" step="0.1" className={inputCls} /></Field>

@@ -140,6 +140,35 @@ export function seed(): Tables {
 
   const t: Tables = {
     profiles, properties, contacts: [], leads: [], lead_activities: [], tasks: [], tickets: [], documents: [], goals: [],
+    doc_folders: [
+      { id: 'f-clients', name: 'Client Files', parent_id: null, color: 'blue', icon: 'folder', created_at: at(-1000) },
+      { id: 'f-c-isha', name: 'Isha Trivedi', parent_id: 'f-clients', color: 'blue', icon: 'user', created_at: at(-800) },
+      { id: 'f-c-devansh', name: 'Devansh Parikh', parent_id: 'f-clients', color: 'blue', icon: 'user', created_at: at(-700) },
+      { id: 'f-c-pooja', name: 'Pooja Sharma', parent_id: 'f-clients', color: 'blue', icon: 'user', created_at: at(-600) },
+      { id: 'f-c-rohan', name: 'Rohan Mehta', parent_id: 'f-clients', color: 'blue', icon: 'user', created_at: at(-500) },
+
+      { id: 'f-projects', name: 'Project Files', parent_id: null, color: 'purple', icon: 'building', created_at: at(-1000) },
+      { id: 'f-p-aurelia', name: 'Aurelia Residences', parent_id: 'f-projects', color: 'purple', icon: 'building', created_at: at(-900) },
+      { id: 'f-p-ambli', name: 'Ambli Crest', parent_id: 'f-projects', color: 'purple', icon: 'building', created_at: at(-850) },
+      { id: 'f-p-thaltej', name: 'Thaltej Plot', parent_id: 'f-projects', color: 'purple', icon: 'building', created_at: at(-800) },
+      { id: 'f-p-aranya', name: 'Aranya Farms', parent_id: 'f-projects', color: 'purple', icon: 'building', created_at: at(-750) },
+
+      { id: 'f-design', name: 'Design Assets', parent_id: null, color: 'rose', icon: 'image', created_at: at(-1000) },
+      { id: 'f-d-brochures', name: 'Brochures & Floor Plans', parent_id: 'f-design', color: 'rose', icon: 'image', created_at: at(-900) },
+      { id: 'f-d-renders', name: '3D Renders & Elevations', parent_id: 'f-design', color: 'rose', icon: 'image', created_at: at(-850) },
+
+      { id: 'f-video', name: 'Video Assets', parent_id: null, color: 'amber', icon: 'video', created_at: at(-1000) },
+      { id: 'f-v-walkthrough', name: 'Virtual Walkthroughs', parent_id: 'f-video', color: 'amber', icon: 'video', created_at: at(-700) },
+      { id: 'f-v-drone', name: 'Drone Aerial Shots', parent_id: 'f-video', color: 'amber', icon: 'video', created_at: at(-650) },
+
+      { id: 'f-documents', name: 'Documents', parent_id: null, color: 'emerald', icon: 'file-text', created_at: at(-1000) },
+      { id: 'f-l-agreements', name: 'Agreements & Sale Deeds', parent_id: 'f-documents', color: 'emerald', icon: 'file-text', created_at: at(-900) },
+      { id: 'f-l-kyc', name: 'KYC & Verification', parent_id: 'f-documents', color: 'emerald', icon: 'file-text', created_at: at(-850) },
+      { id: 'f-l-receipts', name: 'Booking Receipts', parent_id: 'f-documents', color: 'emerald', icon: 'file-text', created_at: at(-800) },
+
+      { id: 'f-team', name: 'Team Resources', parent_id: null, color: 'slate', icon: 'users', created_at: at(-1000) },
+      { id: 'f-t-templates', name: 'Templates & Pitch Decks', parent_id: 'f-team', color: 'slate', icon: 'users', created_at: at(-950) },
+    ],
     pipelines: [{ id: PL, name: 'Sales pipeline', position: 0, created_at: at(-2000) }],
     stages: STAGE_DEFS.map(([key, label, tone, kind], i) => ({ id: S(key), pipeline_id: PL, label, tone, position: i, kind })),
   }
@@ -152,9 +181,34 @@ export function seed(): Tables {
     const property = typeof interest === 'number' ? properties[interest] : null
     const ids = [property?.id, ...(extra.also ?? []).map(k => properties[k].id)].filter((v): v is string => !!v)
     t.contacts.push({ id: `c-${i}`, name: cname, phone, email: `${cname.split(' ')[0].toLowerCase()}@example.com`, kind: status === 'won' ? 'client' : 'lead', created_by: null, created_at: created })
+    const derivedLocality = property?.locality ?? (
+      typeof interest === 'string'
+        ? (interest.includes('Prahlad Nagar') ? 'Prahlad Nagar'
+          : interest.includes('Bodakdev') ? 'Bodakdev'
+          : interest.includes('Thaltej') ? 'Thaltej'
+          : null)
+        : null
+    )
+    const derivedProject = property?.project ?? (
+      typeof interest === 'string' && interest.includes('Prahlad Nagar') ? 'Riviera Heights' : null
+    )
+    const derivedType = (property ? (
+      property.category === 'apartment' ? 'apartment'
+      : property.category === 'bungalow' ? 'bungalow'
+      : property.category === 'weekend_villa' ? 'weekend_villa'
+      : 'apartment'
+    ) : (
+      typeof interest === 'string'
+        ? (interest.includes('bungalow') ? 'bungalow'
+          : interest.includes('villa') ? 'villa'
+          : 'apartment')
+        : null
+    )) as Lead['lead_type']
+
     const lead: Lead = {
       id: `l-${i}`, contact_id: `c-${i}`, source, pipeline_id: PL, status: S(status), property_ids: ids,
       property_interest: property ? `${property.config}, ${property.locality}` : (interest as string),
+      locality: derivedLocality, project: derivedProject, lead_type: derivedType,
       budget_min: bmin * CR, budget_max: bmax * CR, city: phone.startsWith('+91') ? 'Ahmedabad' : 'Overseas (NRI)',
       assigned_to: OWNER, external_ref: source === '99acres' ? `99A-${48210 + i}` : null,
       referral_detail: extra.referral ?? null, notes: extra.notes ?? '',
@@ -200,8 +254,8 @@ export function seed(): Tables {
   task('t-m1', 'Weekly pipeline review', 'meeting', 20, 1)
   task('t-m2', 'Developer meeting — Aurelia pricing', 'meeting', 52, 1.5, { property_id: properties[0].id })
   task('t-m3', 'Photo shoot — Prahlad Nagar Duplex', 'other', 74, 2, { property_id: properties[4].id })
-  task('t-d1', 'Collect KYC from Isha Trivedi', 'documents', -200, null, { lead_id: 'l-7', status: 'done' })
-  task('t-d2', 'Sign off — Signature Residence payment plan', 'approval', 6, null, { lead_id: 'l-10', property_id: properties[3].id })
+  task('t-d1', 'Collect KYC from Isha Trivedi', 'follow_up', -200, null, { lead_id: 'l-7', status: 'done' })
+  task('t-d2', 'Sign off — Signature Residence payment plan', 'other', 6, null, { lead_id: 'l-10', property_id: properties[3].id })
   task('t-v0', 'Site visit — Science City Villa', 'site_visit', -400, 1, { lead_id: 'l-7', property_id: properties[5].id, status: 'done' })
   task('t-t1', 'Text the Sanand plot title update to Falguni', 'text', 8, null, { lead_id: 'l-19' })
 
@@ -218,17 +272,35 @@ export function seed(): Tables {
     goal('yearly', 'revenue', 120 * CR),
   ]
 
-  const doc = (id: string, name: string, folder: Tables['documents'][number]['folder'], kb: number, age: number, link: { lead?: string; property?: string }) =>
-    t.documents.push({ id, name, folder, size: kb * 1024, mime: 'application/pdf', storage_path: '', lead_id: link.lead ?? null, property_id: link.property ?? null, uploaded_by: OWNER, created_at: at(-age) })
-  doc('d-1', 'Aurelia — Floor plans (14th & 15th).pdf', 'Company Brochures', 2400, 800, { property: properties[0].id })
-  doc('d-2', 'Aurelia Residences — Brochure.pdf', 'Company Brochures', 5800, 850, { property: properties[0].id })
-  doc('d-3', 'Ambli Crest — Price list Q4.pdf', 'Company Brochures', 310, 300, { property: properties[1].id })
-  doc('d-4', 'Sale Agreement — Isha Trivedi.pdf', 'Agreements', 1200, 300, { lead: 'l-7', property: properties[5].id })
-  doc('d-5', 'KYC — Isha Trivedi (PAN, Aadhaar).pdf', 'KYC', 900, 400, { lead: 'l-7' })
-  doc('d-6', 'Booking receipt — ₹25 L.pdf', 'General Documents', 150, 320, { lead: 'l-7' })
-  doc('d-7', 'Allotment letter — Devansh Parikh.pdf', 'Agreements', 450, 200, { lead: 'l-12', property: properties[3].id })
-  doc('d-8', 'Title search report — Thaltej plot.pdf', 'General Documents', 3100, 450, { property: properties[2].id })
-  doc('d-9', 'Aranya Farms — NA title certificate.pdf', 'General Documents', 780, 120, { property: properties[7].id })
+  const doc = (
+    id: string, name: string, folder: string, folder_id: string, kb: number, age: number,
+    link: { lead?: string; property?: string } = {}, mime = 'application/pdf', starred = false,
+  ) =>
+    t.documents.push({
+      id, name, folder, folder_id, size: kb * 1024, mime, storage_path: '',
+      lead_id: link.lead ?? null, property_id: link.property ?? null, uploaded_by: OWNER,
+      created_at: at(-age), starred,
+    })
+
+  // Project & Floor Plans
+  doc('d-1', 'Aurelia — Floor plans (14th & 15th).pdf', 'Project Files', 'f-p-aurelia', 2400, 800, { property: properties[0].id }, 'application/pdf', true)
+  doc('d-2', 'Aurelia Residences — Master Brochure.pdf', 'Design Assets', 'f-d-brochures', 5800, 850, { property: properties[0].id }, 'application/pdf', true)
+  doc('d-3', 'Ambli Crest — Price list Q4.xlsx', 'Project Files', 'f-p-ambli', 310, 300, { property: properties[1].id }, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  doc('d-8', 'Title search report — Thaltej plot.pdf', 'Project Files', 'f-p-thaltej', 3100, 450, { property: properties[2].id })
+  doc('d-9', 'Aranya Farms — NA title certificate.pdf', 'Project Files', 'f-p-aranya', 780, 120, { property: properties[7].id })
+
+  // Client Documents (Isha Trivedi, Devansh Parikh, Pooja Sharma, etc.)
+  doc('d-4', 'Sale Agreement — Isha Trivedi.pdf', 'Client Files', 'f-c-isha', 1200, 300, { lead: 'l-7', property: properties[5].id }, 'application/pdf', true)
+  doc('d-5', 'KYC — Isha Trivedi (PAN, Aadhaar).pdf', 'Client Files', 'f-c-isha', 900, 400, { lead: 'l-7' })
+  doc('d-6', 'Booking receipt — ₹25 L.pdf', 'Documents', 'f-l-receipts', 150, 320, { lead: 'l-7' })
+  doc('d-7', 'Allotment letter — Devansh Parikh.pdf', 'Client Files', 'f-c-devansh', 450, 200, { lead: 'l-12', property: properties[3].id })
+  doc('d-10', 'KYC Document — Pooja Sharma.pdf', 'Client Files', 'f-c-pooja', 620, 48, { lead: 'l-9' })
+
+  // Visual Assets & Media (matching the preview inspiration!)
+  doc('d-11', 'Living_room_render_3D.png', 'Design Assets', 'f-d-renders', 4200, 240, { property: properties[0].id }, 'image/png', true)
+  doc('d-12', 'Penthouse_terrace_view.jpg', 'Design Assets', 'f-d-renders', 3800, 190, { property: properties[1].id }, 'image/jpeg')
+  doc('d-13', 'Aurelia_Drone_Walkthrough.mp4', 'Video Assets', 'f-v-drone', 18400, 96, { property: properties[0].id }, 'video/mp4')
+  doc('d-14', 'Sales_Presentation_Pitch_Deck.pdf', 'Team Resources', 'f-t-templates', 7500, 360, {}, 'application/pdf', true)
 
   const ticket = (number: number, title: string, description: string, priority: TicketPriority, status: TicketStatus, age: number, link: { lead?: number; property?: number } = {}): Ticket => {
     const created = at(-age)

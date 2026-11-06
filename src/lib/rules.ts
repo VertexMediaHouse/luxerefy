@@ -1,7 +1,7 @@
 // Business rules shared by every lead entry point. These become the SQL functions
 // capture_lead / escalate_overdue_tickets once Supabase is connected.
 // Imports carry .ts so `npm run check` can run this file directly in Node.
-import type { ActivityType, Goal, GoalPeriod, Lead, LeadSource, Profile, Tables, Task, Ticket, TicketPriority } from './types.ts'
+import type { ActivityType, Goal, GoalPeriod, Lead, LeadSource, LeadType, Profile, Tables, Task, Ticket, TicketPriority } from './types.ts'
 import { SOURCE_LABEL } from './labels.ts'
 
 export const uid = () => crypto.randomUUID()
@@ -55,7 +55,8 @@ export interface CaptureInput {
   name: string; phone: string; source: LeadSource; email?: string | null
   property_ids?: string[] | null
   pipeline_id?: string | null
-  property_interest?: string | null; budget_min?: number | null; budget_max?: number | null; city?: string | null
+  property_interest?: string | null; locality?: string | null; project?: string | null; lead_type?: LeadType | null
+  budget_min?: number | null; budget_max?: number | null; city?: string | null
   external_ref?: string | null; referral_detail?: string | null; message?: string | null; notes?: string | null
   assigned_to?: string | null
 }
@@ -115,7 +116,8 @@ export function captureLead(t: Tables, input: CaptureInput, actor: Profile | nul
   const lead: Lead = {
     id: uid(), contact_id: contact.id, source: input.source, pipeline_id, status: entryOf(pipeline_id),
     property_ids: (input.property_ids ?? []).filter(Boolean),
-    property_interest: input.property_interest ?? null, budget_min: input.budget_min ?? null, budget_max: input.budget_max ?? null,
+    property_interest: input.property_interest ?? null, locality: input.locality ?? null, project: input.project ?? null, lead_type: input.lead_type ?? null,
+    budget_min: input.budget_min ?? null, budget_max: input.budget_max ?? null,
     city: input.city ?? null, external_ref: input.external_ref ?? null,
     referral_detail: (input.source === 'referral' || input.source === 'sales_form') ? input.referral_detail?.trim() || null : null,
     notes: input.notes?.trim() ?? '',

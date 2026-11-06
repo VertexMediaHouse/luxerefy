@@ -6,10 +6,9 @@ import { useUser } from '../../lib/session'
 import { isManager } from '../../lib/rules'
 import { DOC_FOLDERS } from '../../lib/labels'
 import { fileSize, shortDate } from '../../lib/format'
-import type { DocFolder } from '../../lib/types'
 import { useLeads } from '../leads/api'
 import { useProperties } from '../properties/api'
-import { downloadDocument, useDeleteDocument, useDocuments, useUploadDocument, type DocRow } from './api'
+import { downloadDocument, useDeleteDocument, useDocuments, useFolders, useUploadDocument, type DocRow } from './api'
 
 export function DocList({ docs, showLinks }: { docs: DocRow[]; showLinks?: boolean }) {
   const user = useUser()
@@ -43,35 +42,57 @@ export function DocList({ docs, showLinks }: { docs: DocRow[]; showLinks?: boole
 }
 
 /** Upload against a fixed lead/property (panel) or let the user pick one (library page). */
-export function UploadModal({ open, onClose, leadId, propertyId }: { open: boolean; onClose: () => void; leadId?: string; propertyId?: string }) {
-  return <Modal open={open} onClose={onClose} title="Upload document"><UploadForm onDone={onClose} leadId={leadId} propertyId={propertyId} /></Modal>
+export function UploadModal({ open, onClose, leadId, propertyId, defaultFolderId }: { open: boolean; onClose: () => void; leadId?: string; propertyId?: string; defaultFolderId?: string }) {
+  return <Modal open={open} onClose={onClose} title="Upload document"><UploadForm onDone={onClose} leadId={leadId} propertyId={propertyId} defaultFolderId={defaultFolderId} /></Modal>
 }
 
-function UploadForm({ onDone, leadId, propertyId }: { onDone: () => void; leadId?: string; propertyId?: string }) {
+function UploadForm({ onDone, leadId, propertyId, defaultFolderId }: { onDone: () => void; leadId?: string; propertyId?: string; defaultFolderId?: string }) {
   const upload = useUploadDocument()
+  const { data: allFolders = [] } = useFolders()
   const { data: leads = [] } = useLeads()
   const { data: properties = [] } = useProperties()
   const fixed = !!(leadId || propertyId)
+  const [chosenFolderId, setChosenFolderId] = useState<string>(defaultFolderId ?? (allFolders[0]?.id ?? ''))
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const s = (k: string) => String(f.get(k) ?? '')
+    const selectedFolder = allFolders.find(x => x.id === chosenFolderId)
     upload.mutate(
-      { file: f.get('file') as File, folder: s('folder') as DocFolder, lead_id: leadId ?? (s('lead_id') || null), property_id: propertyId ?? (s('property_id') || null) },
+      {
+        file: f.get('file') as File,
+        folder_id: chosenFolderId || null,
+        folder: selectedFolder?.name || s('legacy_folder') || 'General Documents',
+        lead_id: leadId ?? (s('lead_id') || null),
+        property_id: propertyId ?? (s('property_id') || null),
+      },
       { onSuccess: onDone },
     )
   }
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <Field label="File" hint="PDF, images or Office files, up to 20 MB">
-        <input name="file" type="file" required accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.zip" className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100" />
+      <Field label="File" hint="PDF, images, video or Office files, up to 20 MB">
+        <input name="file" type="file" required accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.zip,.mp4" className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100" />
       </Field>
-      <Field label="Folder">
-        <select name="folder" defaultValue={leadId ? 'Agreements' : 'Company Brochures'} className={inputCls}>
-          {DOC_FOLDERS.map(f => <option key={f}>{f}</option>)}
-        </select>
+      <Field label="Destination Folder">
+        {allFolders.length > 0 ? (
+          <select value={chosenFolderId} onChange={e => setChosenFolderId(e.target.value)} className={inputCls}>
+            {allFolders.map(f => {
+              const parent = allFolders.find(p => p.id === f.parent_id)
+              return (
+                <option key={f.id} value={f.id}>
+                  {parent ? `${parent.name} / ${f.name}` : f.name}
+                </option>
+              )
+            })}
+          </select>
+        ) : (
+          <select name="legacy_folder" defaultValue={leadId ? 'Agreements' : 'Company Brochures'} className={inputCls}>
+            {DOC_FOLDERS.map(f => <option key={f}>{f}</option>)}
+          </select>
+        )}
       </Field>
       {!fixed && (
         <div className="grid gap-4 sm:grid-cols-2">

@@ -3,10 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { Activity as ActivityIcon, Building2, CalendarPlus, Check, CheckCircle2, Clock, Hash, Home, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, Sparkles, StickyNote, Trash2, Users, Wallet, X, XCircle } from 'lucide-react'
 import { Avatar, Badge, Button, buttonCls, StageChip, StageIcon, Card, CardHeader, Empty, ErrorText, Field, HeaderLink, inlineInputCls, inputCls, Loading, Modal, PageHeader } from '../../components/ui'
 import { isLost, wonOf } from '../../lib/rules'
-import { NEXT_ACTIONS, SOURCE_LABEL, TASK_KIND_LABEL, TIMED_KINDS } from '../../lib/labels'
+import { LEAD_TYPES, LEAD_TYPE_LABEL, NEXT_ACTIONS, SOURCE_LABEL, TASK_KIND_LABEL, TIMED_KINDS } from '../../lib/labels'
 import { stagesOf } from '../../lib/stages'
 import { budget, dateTime, prettyPhone, relative, toLocalInput } from '../../lib/format'
-import type { ActivityType, Task, TaskKind } from '../../lib/types'
+import type { ActivityType, LeadType, Task, TaskKind } from '../../lib/types'
 import { interestOf, useDeleteLead, useLead, useLeadActions } from './api'
 import { ActivityTimeline } from './ActivityTimeline'
 import { DocumentsPanel } from '../documents/DocumentParts'
@@ -113,6 +113,53 @@ export function LeadDetailPage() {
                 <Row icon={Phone} label="Mobile">{prettyPhone(lead.contact.phone)}</Row>
                 {lead.contact.email && <Row icon={Mail} label="Email"><span className="block truncate">{lead.contact.email}</span></Row>}
                 <Row icon={Home} label="Looking for">{interestOf(lead) ?? '—'}</Row>
+                <Row icon={MapPin} label="Locality">
+                  <input
+                    key={`loc-${lead.id}-${lead.locality ?? ''}`}
+                    defaultValue={lead.locality ?? ''}
+                    onBlur={e => {
+                      const val = e.target.value.trim() || null
+                      if (val !== (lead.locality ?? null)) actions.updateDetails.mutate({ locality: val })
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') e.currentTarget.blur()
+                    }}
+                    placeholder="Add locality..."
+                    className="-mx-1.5 -my-0.5 w-full rounded border border-transparent px-1.5 py-0.5 text-sm font-medium text-slate-800 placeholder:font-normal placeholder:text-slate-400 hover:border-slate-200 hover:bg-slate-50 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </Row>
+                <Row icon={Building2} label="Project">
+                  <input
+                    key={`proj-${lead.id}-${lead.project ?? ''}`}
+                    defaultValue={lead.project ?? ''}
+                    onBlur={e => {
+                      const val = e.target.value.trim() || null
+                      if (val !== (lead.project ?? null)) actions.updateDetails.mutate({ project: val })
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') e.currentTarget.blur()
+                    }}
+                    placeholder="Add project..."
+                    className="-mx-1.5 -my-0.5 w-full rounded border border-transparent px-1.5 py-0.5 text-sm font-medium text-slate-800 placeholder:font-normal placeholder:text-slate-400 hover:border-slate-200 hover:bg-slate-50 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </Row>
+                <Row icon={Home} label="Type">
+                  <select
+                    value={lead.lead_type ?? ''}
+                    onChange={e => {
+                      const val = (e.target.value as LeadType) || null
+                      actions.updateDetails.mutate({ lead_type: val })
+                    }}
+                    className="-mx-1 -my-0.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">Select type...</option>
+                    {LEAD_TYPES.map(t => (
+                      <option key={t} value={t}>
+                        {LEAD_TYPE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                </Row>
                 <Row icon={Wallet} label="Budget">{budget(lead.budget_min, lead.budget_max)}</Row>
                 <Row icon={MapPin} label="City">{lead.city ?? '—'}</Row>
                 {lead.source === 'referral' && <Row icon={Sparkles} label="Referred by">{lead.referral_detail ?? '—'}</Row>}
@@ -216,7 +263,7 @@ function FollowUpPanel({ lead, actions, onReschedule }: { lead: NonNullable<Retu
               {NEXT_ACTIONS.map(k => <option key={k} value={k}>{TASK_KIND_LABEL[k]}</option>)}
             </select>
           </Field>
-          <Field label="About"><input name="title" className={inputCls} placeholder={`${TASK_KIND_LABEL[kind]} ${lead.contact.name}`} /></Field>
+          <Field label="Feedback"><input name="title" className={inputCls} placeholder={`${TASK_KIND_LABEL[kind]} ${lead.contact.name}`} /></Field>
           <Field label={timed ? 'Starts' : 'When'}><input name="due_at" type="datetime-local" required defaultValue={toLocalInput(soon)} className={inputCls} /></Field>
           {timed && (
             <Field label="Ends" hint="Blocks the slot in your calendar">

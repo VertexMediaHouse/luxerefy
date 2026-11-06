@@ -11,7 +11,24 @@ function load(): Tables {
     // A store written before pipelines or goals existed would render blank, so re-seed instead.
     if (raw) {
       const t = JSON.parse(raw) as Tables
-      if (t.pipelines?.length && t.stages?.length && t.goals) return t
+      if (t.pipelines?.length && t.stages?.length && t.goals) {
+        const fresh = seed()
+        if (!t.doc_folders || !t.doc_folders.length) {
+          t.doc_folders = fresh.doc_folders
+          t.documents = fresh.documents
+        }
+        if (t.leads) {
+          t.leads.forEach(l => {
+            const seedLead = fresh.leads.find(fl => fl.id === l.id)
+            if (seedLead) {
+              if (l.locality === undefined) l.locality = seedLead.locality
+              if (l.project === undefined) l.project = seedLead.project
+              if (l.lead_type === undefined) l.lead_type = seedLead.lead_type
+            }
+          })
+        }
+        return t
+      }
     }
   } catch { /* unreadable storage → fresh seed */ }
   return seed()

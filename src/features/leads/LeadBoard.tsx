@@ -41,7 +41,6 @@ function TaskIcon({ kind }: { kind: string }) {
 function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDrag: (id: string | null) => void }) {
   const task = l.next_task
   const overdue = !!task && Date.parse(task.due_at) < Date.now()
-  const idle = Math.floor((Date.now() - Date.parse(l.updated_at)) / DAY)
   const assignee = l.assigned_to ? db.profiles.find(p => p.id === l.assigned_to) : null
   const del = useDeleteLead()
 
@@ -137,7 +136,7 @@ function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDr
         </div>
       </div>
 
-      {/* Source, Referral Attribution & Age */}
+      {/* Source & Referral Attribution */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
         <span className={`rounded px-1.5 py-0.5 font-medium ${SOURCE_STYLE[l.source] ?? SOURCE_STYLE.other}`}>
           {SOURCE_LABEL[l.source] || l.source}
@@ -151,14 +150,6 @@ function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDr
           </span>
         )}
         <span className="ml-auto text-slate-400 text-[10px]">{relative(l.created_at)}</span>
-        {idle >= 5 && (
-          <span
-            className="rounded bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700 ring-1 ring-amber-500/20"
-            title={`No activity in ${idle} days`}
-          >
-            {idle}d idle
-          </span>
-        )}
       </div>
 
       {/* Footer: Follow-up task & Activity/Docs counter */}
@@ -258,7 +249,22 @@ export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages }: { 
                   active ? 'bg-slate-200/80 ring-slate-300' : 'bg-slate-100 ring-slate-200/70'
                 }`}
               >
-                {shown.map(l => <LeadCard key={l.id} l={l} dragging={drag === l.id} onDrag={setDrag} />)}
+                {shown.map(l => {
+                  const idleDays = Math.floor((Date.now() - Date.parse(l.updated_at)) / DAY)
+                  return (
+                    <div key={l.id} className="relative">
+                      <LeadCard l={l} dragging={drag === l.id} onDrag={setDrag} />
+                      {idleDays >= 5 && (
+                        <span
+                          className="absolute -right-1.5 -top-1.5 z-10 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm"
+                          title={`No activity in ${idleDays} days`}
+                        >
+                          {idleDays}d
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
                 {col.length > shown.length && <Link to={`/leads?pipeline=${pid}&status=${s.id}`} className="block rounded-xl py-1.5 text-center text-xs font-medium text-slate-500 hover:bg-white hover:text-slate-900">{col.length - shown.length} more</Link>}
                 {!col.length && (
                   <p className={`py-8 text-center text-xs transition-colors ${active ? 'text-slate-500' : 'text-slate-400'}`}>

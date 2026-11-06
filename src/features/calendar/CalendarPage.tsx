@@ -21,8 +21,6 @@ const CHIP: Record<TaskKind, string> = {
   follow_up: 'border-slate-500 bg-slate-100 text-slate-900',
   site_visit: 'border-emerald-500 bg-emerald-50 text-emerald-900',
   meeting: 'border-slate-700 bg-slate-100 text-slate-900',
-  documents: 'border-slate-300 bg-slate-50 text-slate-700',
-  approval: 'border-red-500 bg-red-50 text-red-900',
   other: 'border-slate-300 bg-slate-50 text-slate-700',
 }
 
