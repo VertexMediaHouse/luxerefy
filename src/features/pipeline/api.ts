@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { db, respond, write } from '../../lib/mock/db'
+import { db, respond, write } from '../../lib/db'
 import { entryOf, isManager, isOpen, lostOf, uid, wonOf } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { newStageId, pipelines, stagesOf } from '../../lib/stages'

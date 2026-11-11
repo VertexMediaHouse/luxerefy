@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { db, respond, write } from '../../lib/mock/db'
+import { db, respond, write } from '../../lib/db'
 import { deleteFile, getFile, putFile } from '../../lib/mock/files'
 import { canSeeLead, isManager, logActivity, uid } from '../../lib/rules'
 import { useUser } from '../../lib/session'
@@ -105,7 +105,8 @@ export function useUploadDocument() {
       const lead = lead_id ? db.leads.find(l => l.id === lead_id) : null
       if (lead_id && (!lead || !canSeeLead(user, lead))) throw new Error('Lead not found')
       const id = uid()
-      await putFile(id, file)
+      const storage_path = `${lead_id ? `lead/${lead_id}` : property_id ? `property/${property_id}` : 'general'}/${id}-${file.name.replace(/[^\w.-]+/g, '_')}` // storage keys reject some characters
+      await putFile(storage_path, file)
       return write(() => {
         const now = new Date().toISOString()
         const resolvedFolder = folder || (folder_id ? db.doc_folders?.find(f => f.id === folder_id)?.name : 'General Documents') || 'General Documents'
@@ -113,7 +114,7 @@ export function useUploadDocument() {
           id, folder: resolvedFolder, folder_id: folder_id ?? null,
           lead_id: lead_id ?? null, property_id: property_id ?? null,
           name: file.name, size: file.size, mime: file.type || 'application/octet-stream',
-          storage_path: `${lead_id ? `lead/${lead_id}` : property_id ? `property/${property_id}` : 'general'}/${id}-${file.name}`,
+          storage_path,
           uploaded_by: user.id, created_at: now, starred: false,
         }
         db.documents.push(doc)
@@ -130,15 +131,15 @@ export function useDeleteDocument() {
     mutationFn: async (id: string) => {
       const d = db.documents.find(d => d.id === id)
       if (!d || !(isManager(user) || d.uploaded_by === user.id)) throw new Error('Only managers or the uploader can delete this document.')
-      await deleteFile(id)
+      await deleteFile(d.storage_path)
       return write(() => { db.documents = db.documents.filter(x => x.id !== id) })
     },
   })
 }
 
 export async function downloadDocument(d: Doc) {
-  const blob = await getFile(d.id)
-  if (!blob) return alert('This is a sample record in the demo; no file is attached. Uploaded files download normally.')
+  const blob = await getFile(d.storage_path)
+  if (!blob) return alert('The file for this document could not be found in storage.')
   const url = URL.createObjectURL(blob)
   const a = Object.assign(document.createElement('a'), { href: url, download: d.name })
   a.click()

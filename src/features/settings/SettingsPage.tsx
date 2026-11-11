@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { Check, ChevronRight, DatabaseBackup, Eye, RotateCcw, Settings, UserCog } from 'lucide-react'
-import { Button, Card, CardHeader, Field, inputCls, PageHeader } from '../../components/ui'
+import { useQueryClient } from '@tanstack/react-query'
+import { Check, ChevronRight, DatabaseBackup, Eye, Settings, UserCog } from 'lucide-react'
+import { Button, Card, CardHeader, ErrorText, Field, inputCls, PageHeader } from '../../components/ui'
 import { useUser } from '../../lib/session'
 import { toggleEyeSafe, useEyeSafe } from '../../lib/eyeSafe'
-import { db, resetDemo, save } from '../../lib/mock/db'
+import { db, write } from '../../lib/db'
 
 const LINKS = [
   { to: '/backup', icon: DatabaseBackup, label: 'Backups', hint: 'Google Sheets sync, snapshots, download and restore' },
@@ -18,17 +19,25 @@ export function SettingsPage() {
   const [email, setEmail] = useState(user.email)
   const [phone, setPhone] = useState(user.phone)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+  const qc = useQueryClient()
 
-  const saveProfile = (e: FormEvent) => {
+  const saveProfile = async (e: FormEvent) => {
     e.preventDefault()
-    const p = db.profiles.find(p => p.id === user.id)
-    if (p) {
-      p.full_name = name.trim() || p.full_name
-      p.email = email.trim() || p.email
-      p.phone = phone.trim() || p.phone
-      save()
+    setError('')
+    try {
+      await write(() => {
+        const p = db.profiles.find(p => p.id === user.id)
+        if (!p) return
+        p.full_name = name.trim() || p.full_name
+        p.email = email.trim() || p.email
+        p.phone = phone.trim() || p.phone
+      })
+      await qc.invalidateQueries({ queryKey: ['profiles'] })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
+    } catch (ex) {
+      setError((ex as Error).message)
     }
   }
 
@@ -41,8 +50,9 @@ export function SettingsPage() {
           <CardHeader title="Profile" subtitle="Your details across the CRM" />
           <form onSubmit={saveProfile} className="space-y-4 p-5">
             <Field label="Full name"><input value={name} onChange={e => setName(e.target.value)} className={inputCls} /></Field>
-            <Field label="Email"><input value={email} onChange={e => setEmail(e.target.value)} type="email" className={inputCls} /></Field>
+            <Field label="Email" hint="Contact email only. Your sign-in email is changed in Supabase Auth."><input value={email} onChange={e => setEmail(e.target.value)} type="email" className={inputCls} /></Field>
             <Field label="Mobile"><input value={phone} onChange={e => setPhone(e.target.value)} className={inputCls} /></Field>
+            <ErrorText error={error} />
             <Button type="submit">{saved ? <><Check className="size-4" /> Saved</> : 'Save changes'}</Button>
           </form>
         </Card>
@@ -76,19 +86,6 @@ export function SettingsPage() {
               </li>
             ))}
           </ul>
-        </Card>
-
-        <Card>
-          <CardHeader icon={RotateCcw} title="Demo data" subtitle="This build stores everything in your browser" />
-          <div className="space-y-3 p-5">
-            <p className="text-sm leading-relaxed text-slate-500">
-              Resetting throws away every change made here and reloads the original sample workspace. Take a backup first if
-              you want to keep anything.
-            </p>
-            <Button variant="danger" onClick={() => confirm('Reset all demo data to the original sample? This cannot be undone.') && resetDemo()}>
-              <RotateCcw className="size-4" /> Reset demo data
-            </Button>
-          </div>
         </Card>
       </div>
     </>

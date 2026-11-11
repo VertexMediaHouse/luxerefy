@@ -5,8 +5,7 @@ import { Brand } from '../../components/Layout'
 import { Badge, Button } from '../../components/ui'
 import { inr } from '../../lib/format'
 import { PROPERTY_STATUS_LABEL, PROPERTY_STATUS_TONE } from '../../lib/labels'
-import { db, write } from '../../lib/mock/db'
-import { captureLead } from '../../lib/rules'
+import { captureRemote, db } from '../../lib/db'
 import type { LeadSource } from '../../lib/types'
 
 const BUDGET_PRESETS = [
@@ -66,28 +65,23 @@ export function SalesFormPage() {
     const fullNotes = [notes.trim(), `[Captured via public link · ${trackingTag}]`].filter(Boolean).join('\n\n')
 
     try {
-      await write(() =>
-        captureLead(
-          db,
-          {
-            name: name.trim(),
-            phone: phone.trim(),
-            email: email.trim() || null,
-            source: sourceParam,
-            referral_detail: refTag || (sourceParam === 'referral' || sourceParam === 'sales_form' ? 'Sales Form' : null),
-            property_ids: propIds,
-            property_interest: headlineInterest,
-            budget_min: budgetConfig?.min ?? null,
-            budget_max: budgetConfig?.max ?? null,
-            city: city.trim() || null,
-            notes: fullNotes,
-            message: `Public form enquiry for ${headlineInterest}`,
-            assigned_to: agentId || null,
-            pipeline_id: pipelineId || null,
-          },
-          null,
-        ),
-      )
+      const [r] = await captureRemote([{
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim() || null,
+        source: sourceParam,
+        referral_detail: refTag || (sourceParam === 'referral' || sourceParam === 'sales_form' ? 'Sales Form' : null),
+        property_ids: propIds,
+        property_interest: headlineInterest,
+        budget_min: budgetConfig?.min ?? null,
+        budget_max: budgetConfig?.max ?? null,
+        city: city.trim() || null,
+        notes: fullNotes,
+        message: `Public form enquiry for ${headlineInterest}`,
+        assigned_to: agentId || null,
+        pipeline_id: pipelineId || null,
+      }])
+      if (r.error !== undefined) throw new Error(r.error)
       setSubmittedName(name)
       setSubmittedPhone(phone)
       setDone(true)

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cron, db, respond, write } from '../../lib/mock/db'
+import { cron, db, respond, write } from '../../lib/db'
 import { canSeeTicket, soleOwner, uid } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import type { Profile, Ticket, TicketStatus } from '../../lib/types'

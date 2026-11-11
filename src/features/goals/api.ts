@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { db, respond, write } from '../../lib/mock/db'
+import { db, respond, write } from '../../lib/db'
 import { goalProgress, isWon, periodRange, uid } from '../../lib/rules'
 import type { Goal, GoalMetric, GoalPeriod } from '../../lib/types'
 

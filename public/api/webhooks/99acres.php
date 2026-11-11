@@ -32,75 +32,39 @@ $pick = function (string ...$keys) use ($top, $extra): ?string {
   return null;
 };
 
-// Port of normalizePhone in src/lib/rules.ts. Keep the two in sync: contacts dedupe on this value.
-function normalize_phone(?string $raw): ?string {
-  if ($raw === null) return null;
-  $s = trim($raw);
-  $d = preg_replace('/\D/', '', $s);
-  if (str_starts_with($s, '+') && !str_starts_with($s, '+91')) return strlen($d) >= 8 && strlen($d) <= 15 ? "+$d" : null;
-  $local = preg_replace('/^(?:91|0)(?=\d{10}$)/', '', $d);
-  return preg_match('/^[6-9]\d{9}$/', $local) ? "+91$local" : null;
-}
+$phone = $pick('phone', 'mobile', 'phone_number', 'mobile_number', 'contact');
+if ($phone === null) out(422, ['error' => 'Missing phone']);
+$email = $pick('email');
 
-$phone = normalize_phone($pick('phone', 'mobile', 'phone_number', 'mobile_number', 'contact'));
-if ($phone === null) out(422, ['error' => 'Missing or invalid phone']);
-
-function sb(string $method, string $path, ?array $body = null): array {
-  global $SB_URL, $SB_KEY;
-  $ch = curl_init("$SB_URL/rest/v1/$path");
-  $opts = [
-    CURLOPT_CUSTOMREQUEST => $method,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT => 10,
-    // apikey alone works for both sb_secret_ and legacy service_role keys.
-    CURLOPT_HTTPHEADER => ["apikey: $SB_KEY", 'Content-Type: application/json', 'Prefer: return=representation'],
-  ];
-  if ($body !== null) $opts[CURLOPT_POSTFIELDS] = json_encode($body);
-  curl_setopt_array($ch, $opts);
-  $res = curl_exec($ch);
-  $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-  if ($status >= 300 || $status === 0) error_log("99acres webhook: $method $path -> $status " . (is_string($res) ? $res : curl_error($ch)));
-  curl_close($ch);
-  return [$status, is_string($res) ? json_decode($res, true) : null];
-}
-function fail(): void { out(502, ['error' => 'Database error']); }
-
-// Find or create the contact (phone is unique).
-$findContact = function () use ($phone): ?string {
-  [$st, $rows] = sb('GET', 'contacts?select=id&phone=eq.' . rawurlencode($phone));
-  if ($st !== 200) fail();
-  return $rows[0]['id'] ?? null;
-};
-$contactId = $findContact();
-if ($contactId === null) {
-  $email = $pick('email');
-  [$st, $rows] = sb('POST', 'contacts', [
+// Same capture path as the app and public forms (capture_leads in supabase/schema.sql):
+// normalises the phone, dedupes by contact, books tomorrow's first call.
+$ch = curl_init("$SB_URL/rest/v1/rpc/capture_leads");
+curl_setopt_array($ch, [
+  CURLOPT_POST => true,
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_TIMEOUT => 10,
+  // apikey alone works for both sb_secret_ and legacy service_role keys.
+  CURLOPT_HTTPHEADER => ["apikey: $SB_KEY", 'Content-Type: application/json'],
+  CURLOPT_POSTFIELDS => json_encode(['rows' => [[
     'name' => $pick('name', 'lead_name', 'buyer_name') ?? '99acres buyer',
     'phone' => $phone,
     'email' => $email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null,
-    'kind' => 'lead',
-  ]);
-  if ($st === 201) $contactId = $rows[0]['id'];
-  elseif ($st === 409) $contactId = $findContact(); // same phone inserted concurrently
-  if ($contactId === null) fail();
-}
-
-// First pipeline by position; its entry stage is "<id>-new" (entryOf in rules.ts).
-[$st, $rows] = sb('GET', 'pipelines?select=id&order=position.asc&limit=1');
-if ($st !== 200) fail();
-$pipelineId = $rows[0]['id'] ?? 'pl-1';
-
-[$st, $rows] = sb('POST', 'leads', [
-  'contact_id' => $contactId,
-  'source' => '99acres',
-  'pipeline_id' => $pipelineId,
-  'status' => "$pipelineId-new",
-  'property_interest' => $pick('property', 'project', 'property_name', 'interest'),
-  'city' => $pick('city'),
-  'external_ref' => $pick('lead_id', 'query_id', 'id'),
-  'notes' => $pick('message', 'query', 'comments') ?? '',
-  'raw_payload' => $data,
+    'source' => '99acres',
+    'property_interest' => $pick('property', 'project', 'property_name', 'interest'),
+    'city' => $pick('city'),
+    'external_ref' => $pick('lead_id', 'query_id', 'id'),
+    'message' => $pick('message', 'query', 'comments'),
+    'raw_payload' => $data,
+  ]]]),
 ]);
-if ($st !== 201) fail();
+$res = curl_exec($ch);
+$status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+if ($status !== 200) error_log("99acres webhook: capture_leads -> $status " . (is_string($res) ? $res : curl_error($ch)));
+curl_close($ch);
+if ($status !== 200) out(502, ['error' => 'Database error']);
 
-out(200, ['id' => $rows[0]['id']]);
+$r = (json_decode((string) $res, true) ?? [])[0] ?? null;
+if (!is_array($r)) out(502, ['error' => 'Database error']);
+if (isset($r['error'])) out(422, ['error' => $r['error']]);
+// created=false: this number already had an open lead; the enquiry was logged on it instead of duplicating.
+out(200, ['id' => $r['id'], 'created' => $r['created']]);

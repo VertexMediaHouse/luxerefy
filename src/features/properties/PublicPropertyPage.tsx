@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useParams } from 'react-router'
-import { BedDouble, CheckCircle2, ChevronLeft, ChevronRight, MapPin, Ruler } from 'lucide-react'
+import { BedDouble, CheckCircle2, ChevronLeft, ChevronRight, Info, MapPin, Ruler } from 'lucide-react'
 import { Button, Card, ErrorText, Field, inputCls, Loading } from '../../components/ui'
 import { Brand } from '../../components/Layout'
 import { PROPERTY_STATUS_LABEL } from '../../lib/labels'
@@ -28,6 +28,43 @@ export function PublicPropertyPage() {
       )}
       <footer className="mt-16 border-t border-slate-100 py-8 text-center text-xs text-slate-400">© Luxerefy · Ahmedabad's Luxury Real Estate Advisory</footer>
     </div>
+  )
+}
+
+/** Buyer-facing explanations for jargon, shown as an ⓘ tooltip. */
+const SPEC_INFO: Record<string, string> = {
+  'Carpet area': "Area you can actually cover with a carpet. Doesn't include common areas like lift, lobby, etc.",
+  'Built-up area': 'Carpet area + wall area.',
+  'Super built-up area': 'Built-up area + common areas (lift, lobby, stairs, shaft, elevator etc.)',
+}
+
+const youtubeId = (url: string) => url.match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/)?.[1]
+
+function VideoSection({ url }: { url: string }) {
+  const id = youtubeId(url)
+  return (
+    <Section title="Video tour">
+      {id ? (
+        <div className="aspect-video overflow-hidden rounded-2xl bg-slate-100">
+          <iframe src={`https://www.youtube-nocookie.com/embed/${id}`} title="Property video tour" className="size-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+        </div>
+      ) : (
+        <a href={url} target="_blank" rel="noreferrer" className="break-all font-semibold text-blue-700 hover:underline">Watch the video tour →</a>
+      )}
+    </Section>
+  )
+}
+
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex align-middle">
+      <button type="button" aria-label="What does this mean?" className="text-slate-400 hover:text-blue-600 focus:text-blue-600">
+        <Info className="size-3.5" />
+      </button>
+      <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 w-52 -translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-left text-xs font-normal text-white opacity-0 shadow-lg transition group-focus-within:opacity-100 group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
   )
 }
 
@@ -71,19 +108,20 @@ function Listing({ p }: { p: Property }) {
           </div>
           <div className="mt-6 flex flex-wrap gap-3 text-sm font-semibold text-slate-700">
             <span className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2.5 ring-1 ring-slate-200"><BedDouble className="size-4 text-blue-700" /> {p.config}</span>
-            <span className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2.5 ring-1 ring-slate-200"><Ruler className="size-4 text-blue-700" /> {p.area_sqft.toLocaleString('en-IN')} sq ft</span>
+            <span className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2.5 ring-1 ring-slate-200"><Ruler className="size-4 text-blue-700" /> {p.area_sqft.toLocaleString('en-IN')} {p.specs['Area unit'] ?? 'sq ft'} carpet <InfoTip text={SPEC_INFO['Carpet area']} /></span>
           </div>
 
           {p.description && <Section title="Overview"><p className="leading-relaxed whitespace-pre-line text-slate-600">{p.description}</p></Section>}
           {Object.keys(p.specs).length > 0 && (
             <Section title="Specifications">
               <dl className="grid gap-px overflow-hidden rounded-xl bg-slate-200 ring-1 ring-slate-200 sm:grid-cols-2">
-                {Object.entries(p.specs).map(([k, v]) => (
-                  <div key={k} className="flex justify-between gap-4 bg-white px-4 py-3 text-sm"><dt className="text-slate-500">{k}</dt><dd className="text-right font-semibold text-slate-800">{v}</dd></div>
+                {Object.entries(p.specs).filter(([k]) => k !== 'Area unit' && k !== 'Video').map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-4 bg-white px-4 py-3 text-sm"><dt className="flex items-center gap-1.5 text-slate-500">{k}{SPEC_INFO[k] && <InfoTip text={SPEC_INFO[k]} />}</dt><dd className="text-right font-semibold text-slate-800">{v}</dd></div>
                 ))}
               </dl>
             </Section>
           )}
+          {p.specs['Video'] && <VideoSection url={p.specs['Video']} />}
           {p.amenities.length > 0 && (
             <Section title="Amenities">
               <ul className="grid gap-3 sm:grid-cols-2">

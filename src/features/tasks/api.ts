@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { db, respond, write } from '../../lib/mock/db'
+import { db, respond, write } from '../../lib/db'
 import { canSeeLead, canSeeTask, findClash, isManager, logActivity, uid } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { dateTime } from '../../lib/format'

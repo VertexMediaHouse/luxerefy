@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { db, respond, write } from '../../lib/mock/db'
-import { canSeeLead, captureLead, findClash, isLost, isOpen, isWon, logActivity, parse99acres, uid, type CaptureInput } from '../../lib/rules'
+import { captureRemote, db, respond, write } from '../../lib/db'
+import { canSeeLead, findClash, isLost, isOpen, isWon, logActivity, parse99acres, uid, type CaptureInput } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { stage, stageLabel } from '../../lib/stages'
 import { dateTime } from '../../lib/format'
@@ -101,43 +101,47 @@ export function useMoveLead() {
   })
 }
 
+/** Server-side capture (capture_leads RPC): dedupes by phone, logs the activity, books the 99acres call. */
+async function capture(input: CaptureInput) {
+  const [r] = await captureRemote([input])
+  if (r.error !== undefined) throw new Error(r.error)
+  // An agent may not see a lead that got assigned to someone else, so fall back to just its id.
+  return { lead: db.leads.find(l => l.id === r.id) ?? ({ id: r.id } as Lead), created: r.created }
+}
+
 export function useCreateLead() {
-  const user = useUser()
-  return useMutation({ mutationFn: (input: CaptureInput) => write(() => captureLead(db, input, user)) })
+  return useMutation({ mutationFn: capture })
 }
 
 /**
- * Bulk import. captureLead already dedupes by phone and logs the activity, so a sheet row
- * takes the same path as a webhook lead: an existing open lead is merged, not duplicated.
- * One write() for the whole file, so the store is saved once.
+ * Bulk import. Every row takes the same server path as a webhook lead: an existing open lead
+ * is merged, not duplicated. One RPC call for the whole file.
  */
 export function useImportLeads() {
-  const user = useUser()
   return useMutation({
-    mutationFn: (rows: CaptureInput[]) =>
-      write(() => {
-        let created = 0, merged = 0
-        const failed: { row: number; error: string }[] = []
-        rows.forEach((input, i) => {
-          try { captureLead(db, input, user).created ? created++ : merged++ }
-          catch (e) { failed.push({ row: i + 2, error: (e as Error).message }) }
-        })
-        return { created, merged, failed }
-      }),
+    mutationFn: async (rows: CaptureInput[]) => {
+      let created = 0, merged = 0
+      const failed: { row: number; error: string }[] = []
+      ;(await captureRemote(rows)).forEach((r, i) => {
+        if (r.error !== undefined) failed.push({ row: i + 2, error: r.error })
+        else if (r.created) created++
+        else merged++
+      })
+      return { created, merged, failed }
+    },
   })
 }
 
-/** Mock of POST /functions/v1/99acres-webhook: the payload is processed as the system, not the signed-in user. */
+/** Runs a pasted payload through the same capture the real webhook (public/api/webhooks/99acres.php) uses. */
 export function useSimulate99acres() {
   return useMutation({
-    mutationFn: (raw: string) =>
-      write(() => {
-        let payload: unknown = raw
-        try { payload = JSON.parse(raw) } catch { /* not JSON → treat as SMS text */ }
-        const input = parse99acres(payload)
-        if (!input) throw new Error('No phone number found in that message — the webhook would reject it (400).')
-        return captureLead(db, input, null)
-      }),
+    mutationFn: (raw: string) => {
+      let payload: unknown = raw
+      try { payload = JSON.parse(raw) } catch { /* not JSON → treat as SMS text */ }
+      const input = parse99acres(payload)
+      if (!input) throw new Error('No phone number found in that message — the webhook would reject it (400).')
+      return capture(input)
+    },
   })
 }
 

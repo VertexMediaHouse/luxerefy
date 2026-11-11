@@ -1,7 +1,7 @@
 // Lead stages used to be a union in labels.ts. They are rows now, so a manager can rename,
 // reorder and add them, and run more than one board. Reads go straight at the live `db`
 // object, which keeps these callable from render code (StageChip) with no hook.
-import { db } from './mock/db'
+import { db } from './db'
 import { isTerminalId } from './rules'
 import type { LeadStatus, Pipeline, Stage, Tone } from './types'
 

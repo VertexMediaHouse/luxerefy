@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { db, respond } from '../../lib/mock/db'
+import { db, respond } from '../../lib/db'
 import { addedByMe, isWon } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { CATEGORIES, SEGMENTS, type LeadCut } from '../../lib/labels'

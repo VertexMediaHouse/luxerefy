@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { db, write } from '../../lib/mock/db'
+import { db, write } from '../../lib/db'
 import { isOpen } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import type { Profile } from '../../lib/types'

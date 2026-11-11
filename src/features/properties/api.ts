@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { db, respond, write } from '../../lib/mock/db'
-import { captureLead, isManager, uid } from '../../lib/rules'
+import { captureRemote, db, respond, write } from '../../lib/db'
+import { isManager, uid } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { slugify } from '../../lib/format'
 import type { Property } from '../../lib/types'
@@ -81,16 +81,16 @@ export function useDeleteProperty() {
   })
 }
 
-/** Mock of the anon-callable submit_enquiry() RPC behind "Enquire Now". */
+/** "Enquire Now" on the public page: anon-callable capture_leads RPC. */
 export function useSubmitEnquiry(property: Property) {
   return useMutation({
-    mutationFn: (f: { name: string; phone: string; email: string; message: string }) =>
-      write(() => {
-        if (!f.name.trim()) throw new Error('Please enter your name')
-        captureLead(db, {
-          ...f, source: 'property_page', property_ids: [property.id],
-          property_interest: `${property.config}, ${property.locality}`, city: property.city,
-        }, null)
-      }),
+    mutationFn: async (f: { name: string; phone: string; email: string; message: string }) => {
+      if (!f.name.trim()) throw new Error('Please enter your name')
+      const [r] = await captureRemote([{
+        ...f, source: 'property_page', property_ids: [property.id],
+        property_interest: `${property.config}, ${property.locality}`, city: property.city,
+      }])
+      if (r.error !== undefined) throw new Error(r.error)
+    },
   })
 }

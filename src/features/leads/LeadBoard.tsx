@@ -6,7 +6,7 @@ import { SOURCE_LABEL } from '../../lib/labels'
 import { defaultPipeline, stagesOf, stageTone } from '../../lib/stages'
 import { budget, prettyPhone, relative } from '../../lib/format'
 import type { LeadStatus } from '../../lib/types'
-import { db } from '../../lib/mock/db'
+import { db } from '../../lib/db'
 import { interestOf, useDeleteLead, useMoveLead, type LeadRow } from './api'
 
 const cr = (n: number) => +(n / 1e7).toFixed(2)

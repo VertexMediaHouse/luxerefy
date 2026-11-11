@@ -89,6 +89,10 @@ function readFiles(files: FileList): Promise<string[]> {
   })))
 }
 
+/** Spec keys owned by structured form fields; kept out of the free-form specs textarea. */
+const STRUCTURED_SPECS = ['Area unit', 'Built-up area', 'Super built-up area', 'Furnishing', 'Other rooms', 'Covered parking', 'Open parking', 'Total floors', 'On floor', 'Duplex', 'Availability', 'Price negotiable', 'Brokerage', 'Brokerage negotiable', 'Video']
+const OTHER_ROOMS = ['Pooja Room', 'Study Room', 'Servant Room', 'Store Room']
+
 function PropertyForm({ initial }: { initial: Property | null }) {
   const user = useUser()
   const nav = useNavigate()
@@ -96,6 +100,10 @@ function PropertyForm({ initial }: { initial: Property | null }) {
   const del = useDeleteProperty()
   const [images, setImages] = useState(initial?.images.join('\n') ?? '')
   const [price, setPrice] = useState(initial ? String(initial.price / 1e7) : '')
+  const sp = (k: string) => initial?.specs[k] ?? ''
+  const spNum = (k: string) => sp(k).replace(/[^\d.]/g, '')
+  const [areaUnit, setAreaUnit] = useState(initial?.specs['Area unit'] === 'sq yd' ? 'sq yd' : 'sq ft')
+  const [brokerageType, setBrokerageType] = useState(!initial?.specs['Brokerage'] ? '' : initial.specs['Brokerage'].includes('%') ? 'percent' : 'fixed')
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
     const urls = await readFiles(files)
@@ -106,6 +114,23 @@ function PropertyForm({ initial }: { initial: Property | null }) {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const s = (k: string) => String(f.get(k) ?? '').trim()
+    const structured: Record<string, string> = {}
+    const set = (k: string, v: string) => { if (v) structured[k] = v }
+    structured['Area unit'] = areaUnit
+    set('Built-up area', s('builtup') && `${s('builtup')} ${areaUnit}`)
+    set('Super built-up area', s('super_builtup') && `${s('super_builtup')} ${areaUnit}`)
+    set('Furnishing', s('furnishing'))
+    set('Other rooms', f.getAll('other_rooms').map(String).join(', '))
+    set('Covered parking', s('covered_parking'))
+    set('Open parking', s('open_parking'))
+    set('Total floors', s('total_floors'))
+    set('On floor', s('on_floor'))
+    if (f.get('duplex') === 'on') structured['Duplex'] = 'Yes'
+    set('Availability', s('availability'))
+    if (f.get('price_negotiable') === 'on') structured['Price negotiable'] = 'Yes'
+    set('Brokerage', s('brokerage_amount') && (s('brokerage_type') === 'percent' ? `${s('brokerage_amount')}% of price` : `₹${s('brokerage_amount')}`))
+    if (f.get('brokerage_negotiable') === 'on') structured['Brokerage negotiable'] = 'Yes'
+    set('Video', s('video'))
     save.mutate(
       {
         id: initial?.id,
@@ -114,7 +139,7 @@ function PropertyForm({ initial }: { initial: Property | null }) {
           segment: s('segment') as PropertySegment, category: s('category') as PropertyCategory,
           locality: s('locality'), city: s('city') || 'Ahmedabad', description: s('description'),
           amenities: s('amenities').split(',').map(a => a.trim()).filter(Boolean),
-          specs: Object.fromEntries(lines(s('specs')).filter(l => l.includes(':')).map(l => [l.slice(0, l.indexOf(':')).trim(), l.slice(l.indexOf(':') + 1).trim()])),
+          specs: { ...Object.fromEntries(lines(s('specs')).filter(l => l.includes(':')).map(l => [l.slice(0, l.indexOf(':')).trim(), l.slice(l.indexOf(':') + 1).trim()])), ...structured },
           images: lines(images), status: s('status') as PropertyStatus, is_public: f.get('is_public') === 'on',
         },
       },
@@ -158,9 +183,70 @@ function PropertyForm({ initial }: { initial: Property | null }) {
               <Field label="Project / society"><input name="project" defaultValue={initial?.project} className={inputCls} /></Field>
               <Field label="Configuration"><input name="config" defaultValue={initial?.config} className={inputCls} placeholder="4 BHK Penthouse" /></Field>
               <Field label="Price (₹ Cr)" hint={Number(price) > 0 ? inr(Number(price) * 1e7) : undefined}><input type="number" min="0" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className={inputCls} /></Field>
-              <Field label="Carpet area (sq ft)"><input name="area_sqft" type="number" min="0" defaultValue={initial?.area_sqft} className={inputCls} /></Field>
+              <Field label="Area unit">
+                <select value={areaUnit} onChange={e => setAreaUnit(e.target.value)} className={inputCls}>
+                  <option value="sq ft">Sq. feet</option>
+                  <option value="sq yd">Sq. yards</option>
+                </select>
+              </Field>
+              <Field label={`Carpet area (${areaUnit})`}><input name="area_sqft" type="number" min="0" defaultValue={initial?.area_sqft} className={inputCls} /></Field>
+              <Field label={`Built-up area (${areaUnit})`}><input name="builtup" type="number" min="0" defaultValue={spNum('Built-up area')} className={inputCls} /></Field>
+              <Field label={`Super built-up area (${areaUnit})`}><input name="super_builtup" type="number" min="0" defaultValue={spNum('Super built-up area')} className={inputCls} /></Field>
               <Field label="Locality"><input name="locality" defaultValue={initial?.locality} className={inputCls} placeholder="Shela" /></Field>
               <Field label="City"><input name="city" defaultValue={initial?.city ?? 'Ahmedabad'} className={inputCls} /></Field>
+              <div className="space-y-4 rounded-lg bg-slate-50 p-4 sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input name="price_negotiable" type="checkbox" defaultChecked={!!sp('Price negotiable')} className="size-4 accent-blue-600" /> Price is negotiable
+                </label>
+                <div>
+                  <span className="mb-2 block text-sm font-medium text-slate-700">Do you charge brokerage?</span>
+                  <input type="hidden" name="brokerage_type" value={brokerageType} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {([['', 'No'], ['percent', '% of price'], ['fixed', 'Fixed ₹']] as const).map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => setBrokerageType(v)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${brokerageType === v ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'}`}>
+                        {l}
+                      </button>
+                    ))}
+                    {brokerageType && (<>
+                      <input name="brokerage_amount" type="number" min="0" step="0.01" defaultValue={spNum('Brokerage')} className={`${inputCls} w-28`} placeholder={brokerageType === 'percent' ? '1' : '50000'} />
+                      <label className="flex items-center gap-2 text-sm text-slate-600">
+                        <input name="brokerage_negotiable" type="checkbox" defaultChecked={!!sp('Brokerage negotiable')} className="size-4 accent-blue-600" /> Negotiable
+                      </label>
+                    </>)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+          <Card>
+            <CardHeader title="Property details" />
+            <div className="grid gap-4 p-5 sm:grid-cols-2">
+              <Field label="Furnishing">
+                <select name="furnishing" defaultValue={sp('Furnishing')} className={inputCls}>
+                  {['', 'Furnished', 'Semi-furnished', 'Un-furnished'].map(v => <option key={v} value={v}>{v || '—'}</option>)}
+                </select>
+              </Field>
+              <Field label="Availability">
+                <select name="availability" defaultValue={sp('Availability')} className={inputCls}>
+                  {['', 'Ready to move', 'Under construction'].map(v => <option key={v} value={v}>{v || '—'}</option>)}
+                </select>
+              </Field>
+              <Field label="Covered parking"><input name="covered_parking" type="number" min="0" defaultValue={spNum('Covered parking')} className={inputCls} /></Field>
+              <Field label="Open parking"><input name="open_parking" type="number" min="0" defaultValue={spNum('Open parking')} className={inputCls} /></Field>
+              <Field label="Total floors in building"><input name="total_floors" type="number" min="0" defaultValue={spNum('Total floors')} className={inputCls} /></Field>
+              <Field label="Property on floor"><input name="on_floor" defaultValue={sp('On floor')} className={inputCls} placeholder="3, or Ground" /></Field>
+              <Field label="Other rooms" className="sm:col-span-2">
+                <div className="flex flex-wrap gap-2">
+                  {OTHER_ROOMS.map(r => (
+                    <label key={r} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600">
+                      <input type="checkbox" name="other_rooms" value={r} defaultChecked={sp('Other rooms').includes(r)} className="size-3.5 accent-blue-600" /> {r}
+                    </label>
+                  ))}
+                </div>
+              </Field>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 sm:col-span-2">
+                <input name="duplex" type="checkbox" defaultChecked={!!sp('Duplex')} className="size-4 accent-blue-600" /> This property is a duplex
+              </label>
             </div>
           </Card>
           <Card>
@@ -169,7 +255,7 @@ function PropertyForm({ initial }: { initial: Property | null }) {
               <Field label="Description"><textarea name="description" rows={4} defaultValue={initial?.description} className={inputCls} /></Field>
               <AmenityPicker initial={initial?.amenities ?? []} />
               <Field label="Specifications" hint="One per line, as Label: value">
-                <textarea name="specs" rows={5} defaultValue={Object.entries(initial?.specs ?? {}).map(([k, v]) => `${k}: ${v}`).join('\n')} className={`${inputCls} font-mono text-xs`} placeholder={'Possession: Ready to move\nFacing: East'} />
+                <textarea name="specs" rows={5} defaultValue={Object.entries(initial?.specs ?? {}).filter(([k]) => !STRUCTURED_SPECS.includes(k)).map(([k, v]) => `${k}: ${v}`).join('\n')} className={`${inputCls} font-mono text-xs`} placeholder={'Facing: East\nAge of property: 2 years'} />
               </Field>
             </div>
           </Card>
@@ -197,8 +283,9 @@ function PropertyForm({ initial }: { initial: Property | null }) {
             </div>
           </Card>
           <Card>
-            <CardHeader title="Images" />
+            <CardHeader title="Media" />
             <div className="space-y-3 p-5">
+              <Field label="YouTube video link"><input name="video" type="url" defaultValue={sp('Video')} className={inputCls} placeholder="https://youtube.com/watch?v=…" /></Field>
               <Field label="Upload images" hint="Select files or paste URLs below. First image is the cover.">
                 <input type="file" accept="image/*" multiple onChange={e => handleFiles(e.target.files)} className={`${inputCls} py-1.5 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-medium file:text-blue-700`} />
               </Field>

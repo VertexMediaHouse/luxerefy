@@ -1,6 +1,6 @@
-// Weekly snapshots of the record store. They live in the IndexedDB bucket that already holds
-// document bodies, because localStorage is far too small to keep several copies of the data.
-import { db, KEY } from './mock/db'
+// Weekly snapshots of the record store, kept in this browser's IndexedDB (localStorage is far too
+// small for several copies). Restoring one writes it back to Supabase.
+import { db, replaceAll } from './db'
 import { deleteFile, getFile, listFiles, putFile } from './mock/files'
 import type { Tables } from './types'
 
@@ -149,10 +149,30 @@ function parseCellValue(val: unknown) {
   return val
 }
 
+const PERSON_FIELDS = ['assigned_to', 'created_by', 'actor_id', 'raised_by', 'uploaded_by']
+
+/**
+ * Write a backup's tables to Supabase, replacing what is there. Profiles are not restored (they belong
+ * to Supabase Auth): people in the file are matched to current accounts by email, anyone unknown
+ * (e.g. the old demo 'u-owner') becomes the person restoring. Reloads so every screen shows the result.
+ */
+async function applyRestore(tables: Partial<Tables>, userId: string) {
+  const byEmail = new Map(db.profiles.map(p => [p.email.toLowerCase(), p.id]))
+  const known = new Set(db.profiles.map(p => p.id))
+  const idMap = new Map((tables.profiles ?? []).map(p => [p.id, byEmail.get(String(p.email).toLowerCase()) ?? userId]))
+  const remap = (v: unknown) => (typeof v === 'string' && !known.has(v) ? idMap.get(v) ?? userId : v)
+  for (const [name, rows] of Object.entries(tables) as unknown as [string, Record<string, unknown>[]][]) {
+    if (name === 'profiles' || !Array.isArray(rows)) continue
+    for (const r of rows) for (const f of PERSON_FIELDS) if (r[f] != null) r[f] = remap(r[f])
+  }
+  await replaceAll(tables)
+  location.reload()
+}
+
 /**
  * Replace the whole store from a backup file (.json, .xlsx, or single-table .csv).
  */
-export async function restoreBackup(file: File) {
+export async function restoreBackup(file: File, userId: string) {
   const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
 
   if (ext === '.xlsx' || ext === '.xls') {
@@ -188,9 +208,7 @@ export async function restoreBackup(file: File) {
       throw new Error('This spreadsheet has no recognized CRM sheets (e.g. leads, properties, contacts).')
     }
 
-    localStorage.setItem(KEY, JSON.stringify(tables))
-    location.reload()
-    return
+    return applyRestore(tables, userId)
   }
 
   if (ext === '.csv') {
@@ -218,9 +236,7 @@ export async function restoreBackup(file: File) {
     }
 
     const tables: Tables = { ...db, [targetTable]: parsedRows }
-    localStorage.setItem(KEY, JSON.stringify(tables))
-    location.reload()
-    return
+    return applyRestore(tables, userId)
   }
 
   // Otherwise handle JSON backup
@@ -236,6 +252,5 @@ export async function restoreBackup(file: File) {
   if (missing.length) throw new Error(`This backup is missing ${missing.join(', ')}, so it cannot be restored.`)
   if (!(tables.pipelines as unknown[]).length) throw new Error('This backup has no pipelines in it.')
 
-  localStorage.setItem(KEY, JSON.stringify(tables))
-  location.reload()
+  return applyRestore(tables as Partial<Tables>, userId)
 }

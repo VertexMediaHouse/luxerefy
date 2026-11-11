@@ -54,7 +54,7 @@ export function BackupPage() {
   const restore = async (file: File | undefined) => {
     if (!file) return
     if (!confirm(`Restore from ${file.name}?\n\nThis replaces every lead, contact, property and pipeline in this browser with the contents of that file. It cannot be undone.`)) return
-    await run('restore', () => restoreBackup(file))
+    await run('restore', () => restoreBackup(file, user.id))
   }
 
   if (!keys) return <Loading />

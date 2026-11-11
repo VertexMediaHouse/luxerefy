@@ -1,27 +1,52 @@
-// Mock auth. Becomes supabase.auth + the profiles row once connected.
+// Mock session: the signed-in user is a profiles row id kept in localStorage.
+// ponytail: demo auth, any password works. Restore the Supabase version
+// (git show 501716f:src/lib/session.tsx) once a live project exists again.
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { db, respond } from './mock/db'
+import { db, respond } from './db'
 import type { Profile } from './types'
 
-const KEY = 'luxerefy-crm-user'
-const Ctx = createContext<{ user: Profile | null; signIn: (id: string) => void; signOut: () => void } | null>(null)
+interface Ctx {
+  user: Profile | null
+  /** Signed in but no active profile row (deactivated). */
+  blocked: boolean
+  signIn: (email: string, password: string) => Promise<string | null>
+  signOut: () => void
+}
+const SessionCtx = createContext<Ctx | null>(null)
+
+const KEY = 'luxerefy-crm-session'
 
 export const useProfiles = () =>
   useQuery({ queryKey: ['profiles'], queryFn: () => respond(db.profiles), initialData: () => structuredClone(db.profiles) })
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [userId, setUserId] = useState(() => { try { return localStorage.getItem(KEY) } catch { return null } })
+  const [userId, setUserId] = useState<string | null>(() => {
+    try { return localStorage.getItem(KEY) } catch { return null }
+  })
+
   const { data: profiles } = useProfiles()
   const user = profiles.find(p => p.id === userId && p.active) ?? null
-  const persist = (id: string | null) => {
-    setUserId(id)
-    try { if (id) localStorage.setItem(KEY, id); else localStorage.removeItem(KEY) } catch { /* session lasts this tab only */ }
+
+  const signIn = async (email: string, _password: string) => {
+    const match = db.profiles.find(p => p.email.toLowerCase() === email.trim().toLowerCase())
+    if (!match) return 'No account with that email.'
+    if (!match.active) return 'Your account is not active.'
+    try { localStorage.setItem(KEY, match.id) } catch { /* session just won't survive a reload */ }
+    setUserId(match.id)
+    return null
   }
-  return <Ctx.Provider value={{ user, signIn: persist, signOut: () => persist(null) }}>{children}</Ctx.Provider>
+  const signOut = () => {
+    try { localStorage.removeItem(KEY) } catch { /* nothing to clear */ }
+    setUserId(null)
+  }
+
+  return (
+    <SessionCtx.Provider value={{ user, blocked: !!userId && !user, signIn, signOut }}>{children}</SessionCtx.Provider>
+  )
 }
 
-export const useSession = () => useContext(Ctx)!
+export const useSession = () => useContext(SessionCtx)!
 
 /** Only valid under <RequireAuth>. */
 export const useUser = () => useSession().user!
