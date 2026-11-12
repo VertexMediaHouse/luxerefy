@@ -43,6 +43,29 @@ export function useSaveGoal() {
   })
 }
 
+/**
+ * Adds to (or subtracts from) the hand-entered tally for a target, for work that happened
+ * outside the CRM. Kept separate from the counted actual so the count stays truthful.
+ */
+export function useAddGoalManual() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ period, metric, delta }: { period: GoalPeriod; metric: GoalMetric; delta: number }) =>
+      write(() => {
+        if (!Number.isFinite(delta) || delta === 0) throw new Error('Enter an amount to add')
+        const now = new Date().toISOString()
+        const existing = db.goals.find(g => g.period === period && g.metric === metric)
+        if (!existing) throw new Error('Set a target first')
+        existing.manual = Math.max(0, (existing.manual ?? 0) + delta)
+        existing.updated_at = now
+        return existing
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['goals'] })
+    },
+  })
+}
+
 /** "1 – 31 Oct 2026" for the period on screen, so a number always has a window attached. */
 export function periodLabel(period: GoalPeriod, now = new Date()) {
   const { start, end } = periodRange(period, now)
@@ -112,12 +135,19 @@ export function usePeriodBreakdown(period: GoalPeriod, now = new Date()) {
           }
         })
 
-      const newLeads = db.leads.filter(l => within(l.created_at))
+      const scheduledVisits = db.tasks.filter(k => k.kind === 'site_visit' && k.status === 'pending' && within(k.due_at))
+      const builderMeetings = db.tasks
+        .filter(k => k.kind === 'meeting' && k.status !== 'cancelled' && within(k.due_at))
+        .map(t => {
+          const property = t.property_id ? db.properties.find(p => p.id === t.property_id) : null
+          return { id: t.id, title: t.title, dueAt: t.due_at, status: t.status, propertyTitle: property?.title ?? null }
+        })
 
       return respond({
         wonLeads,
         completedVisits,
-        newLeadsCount: newLeads.length,
+        scheduledVisitsCount: scheduledVisits.length,
+        builderMeetings,
         daysRemaining: periodDaysRemaining(period, now),
         totalDays: periodTotalDays(period, now),
         elapsedPercent: periodElapsedPercent(period, now),

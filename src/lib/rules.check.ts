@@ -90,11 +90,14 @@ g.leads = [
   { ...first.lead, id: 'w1', status: 'pl-1-won', budget_max: 5e7, created_at: now.toISOString(), updated_at: now.toISOString() },
   { ...first.lead, id: 'o1', status: 'pl-1-new', created_at: now.toISOString(), updated_at: now.toISOString() },
 ]
-assert.equal(goalProgress(g, { period: 'monthly', metric: 'leads' }, now), 2)
-assert.equal(goalProgress(g, { period: 'monthly', metric: 'won' }, now), 1)
 assert.equal(goalProgress(g, { period: 'monthly', metric: 'revenue' }, now), 5e7, 'revenue counts the won budget')
 assert.equal(goalProgress(g, { period: 'monthly', metric: 'site_visits' }, now), 0)
-g.tasks = [{ ...slot('sv', 10, 11), title: 'v', kind: 'site_visit', lead_id: null, property_id: null, created_by: null, created_at: '', due_at: now.toISOString(), status: 'done' }]
+const task = (id: string, kind: Tables['tasks'][number]['kind'], status: Tables['tasks'][number]['status']) =>
+  ({ ...slot(id, 10, 11), title: id, kind, lead_id: null, property_id: null, created_by: null, created_at: '', due_at: now.toISOString(), status })
+g.tasks = [task('sv', 'site_visit', 'done'), task('sv2', 'site_visit', 'pending'), task('sv3', 'site_visit', 'cancelled'), task('m1', 'meeting', 'pending')]
 assert.equal(goalProgress(g, { period: 'monthly', metric: 'site_visits' }, now), 1, 'only completed visits count')
+assert.equal(goalProgress(g, { period: 'monthly', metric: 'potential_visits' }, now), 1, 'only visits still ahead count')
+assert.equal(goalProgress(g, { period: 'monthly', metric: 'builder_meetings' }, now), 1)
+assert.equal(goalProgress(g, { period: 'monthly', metric: 'site_visits', manual: 4 }, now), 5, 'manual entries add on top')
 
 console.log('rules ok')

@@ -6,10 +6,11 @@ import {
   CheckCircle2,
   Clock,
   Compass,
-  Flame,
+  Handshake,
   IndianRupee,
   Layers,
   Pencil,
+  Plus,
   Sparkles,
   Target,
   Trophy,
@@ -18,7 +19,7 @@ import { Button, Card, CardHeader, ErrorText, HeaderLink, Loading, PageHeader, i
 import { GOAL_METRICS, GOAL_PERIODS, GOAL_PERIOD_LABEL } from '../../lib/labels'
 import { inr } from '../../lib/format'
 import type { GoalMetric, GoalPeriod } from '../../lib/types'
-import { periodLabel, useGoals, usePeriodBreakdown, useSaveGoal, type GoalRow } from './api'
+import { periodLabel, useAddGoalManual, useGoals, usePeriodBreakdown, useSaveGoal, type GoalRow } from './api'
 import { goalValue } from './GoalParts'
 
 /** Revenue is typed in Crores; other metrics are plain integer counts. */
@@ -44,25 +45,15 @@ const METRIC_CONFIG: Record<
     quickAdd: number[]
   }
 > = {
-  revenue: {
-    icon: IndianRupee,
-    label: 'Revenue Booked',
-    color: 'text-emerald-500',
-    gradient: 'from-emerald-500 to-teal-400',
-    accentBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    unit: 'Cr',
-    tip: 'Total closed deal value in won stage.',
-    quickAdd: [1, 2, 5],
-  },
-  won: {
-    icon: Trophy,
-    label: 'Deals Won',
-    color: 'text-amber-500',
-    gradient: 'from-amber-500 to-orange-400',
-    accentBg: 'bg-amber-50 text-amber-700 border-amber-200',
-    unit: 'deals',
-    tip: 'Total properties officially booked or sold.',
-    quickAdd: [1, 2, 5],
+  potential_visits: {
+    icon: Target,
+    label: 'Potential Visits',
+    color: 'text-indigo-500',
+    gradient: 'from-indigo-500 to-purple-400',
+    accentBg: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    unit: 'visits',
+    tip: 'Site visits scheduled in this period and not yet done.',
+    quickAdd: [5, 10, 20],
   },
   site_visits: {
     icon: Compass,
@@ -74,21 +65,32 @@ const METRIC_CONFIG: Record<
     tip: 'Field client inspections successfully conducted.',
     quickAdd: [2, 5, 10],
   },
-  leads: {
-    icon: Flame,
-    label: 'New Leads',
-    color: 'text-indigo-500',
-    gradient: 'from-indigo-500 to-purple-400',
-    accentBg: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    unit: 'leads',
-    tip: 'Total client inquiries captured in pipeline.',
-    quickAdd: [5, 10, 20],
+  builder_meetings: {
+    icon: Handshake,
+    label: 'Builder Meetings',
+    color: 'text-amber-500',
+    gradient: 'from-amber-500 to-orange-400',
+    accentBg: 'bg-amber-50 text-amber-700 border-amber-200',
+    unit: 'meetings',
+    tip: 'Meetings lined up with builders and developers.',
+    quickAdd: [1, 2, 5],
+  },
+  revenue: {
+    icon: IndianRupee,
+    label: 'Revenue Booked',
+    color: 'text-emerald-500',
+    gradient: 'from-emerald-500 to-teal-400',
+    accentBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    unit: 'Cr',
+    tip: 'Total closed deal value in won stage.',
+    quickAdd: [1, 2, 5],
   },
 }
 
 export function GoalsPage() {
   const { data: goals } = useGoals()
   const save = useSaveGoal()
+  const addManual = useAddGoalManual()
   const [period, setPeriod] = useState<GoalPeriod>('monthly')
   const [activeTab, setActiveTab] = useState<'focused' | 'matrix'>('focused')
   const { data: breakdown } = usePeriodBreakdown(period)
@@ -104,9 +106,9 @@ export function GoalsPage() {
   const revenueTarget = revenueGoal?.target ?? 0
   const revenuePct = revenueTarget > 0 ? Math.round((revenueActual / revenueTarget) * 100) : 0
 
-  const wonGoal = forPeriod.find(g => g.metric === 'won')
-  const wonActual = wonGoal?.actual ?? 0
-  const wonTarget = wonGoal?.target ?? 0
+  const meetGoal = forPeriod.find(g => g.metric === 'builder_meetings')
+  const meetActual = meetGoal?.actual ?? 0
+  const meetTarget = meetGoal?.target ?? 0
 
   const activeTargets = forPeriod.filter(g => g.target > 0)
   const metCount = activeTargets.filter(g => g.actual >= g.target).length
@@ -212,8 +214,8 @@ export function GoalsPage() {
                 <>
                   You have booked <span className="font-semibold text-white">{inr(revenueActual)}</span> of your{' '}
                   <span className="font-semibold text-white">{inr(revenueTarget)}</span> {period} goal.
-                  {wonActual > 0 && (
-                    <> Powered by <span className="font-semibold text-white">{wonActual}{wonTarget > 0 ? ` / ${wonTarget}` : ''} won {wonActual === 1 ? 'deal' : 'deals'}</span>.</>
+                  {meetActual > 0 && (
+                    <> Backed by <span className="font-semibold text-white">{meetActual}{meetTarget > 0 ? ` / ${meetTarget}` : ''} builder {meetActual === 1 ? 'meeting' : 'meetings'}</span>.</>
                   )}
                 </>
               ) : (
@@ -281,8 +283,8 @@ export function GoalsPage() {
 
             <div className="space-y-2">
               <div className="rounded-lg bg-white/5 p-2.5 px-3 border border-white/10 backdrop-blur-xs">
-                <div className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Wins Booked</div>
-                <div className="text-lg font-bold text-emerald-400">{wonActual} {wonActual === 1 ? 'deal' : 'deals'}</div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Builder Meetings</div>
+                <div className="text-lg font-bold text-emerald-400">{meetActual} {meetActual === 1 ? 'meeting' : 'meetings'}</div>
               </div>
               <div className="rounded-lg bg-white/5 p-2.5 px-3 border border-white/10 backdrop-blur-xs">
                 <div className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Field Visits</div>
@@ -342,7 +344,8 @@ export function GoalsPage() {
                   goal={goal}
                   daysRemaining={daysRemaining}
                   onSave={target => save.mutate({ period, metric, target })}
-                  pending={save.isPending}
+                  onAddManual={delta => addManual.mutate({ period, metric, delta })}
+                  pending={save.isPending || addManual.isPending}
                 />
               )
             })}
@@ -471,10 +474,10 @@ export function GoalsPage() {
                 icon="💎"
               />
               <BadgeTrophy
-                title="Hat-Trick Dealmaker"
-                desc="Close 3+ deals in one month"
-                unlocked={wonActual >= 3}
-                progress={Math.min(100, Math.round((wonActual / 3) * 100))}
+                title="Builder Network"
+                desc="Line up 3+ builder meetings"
+                unlocked={meetActual >= 3}
+                progress={Math.min(100, Math.round((meetActual / 3) * 100))}
                 icon="⚡"
               />
               <BadgeTrophy
@@ -485,10 +488,10 @@ export function GoalsPage() {
                 icon="🏡"
               />
               <BadgeTrophy
-                title="Pipeline Machine"
-                desc="Capture 20+ inquiries in period"
-                unlocked={(breakdown?.newLeadsCount ?? 0) >= 20}
-                progress={Math.min(100, Math.round(((breakdown?.newLeadsCount ?? 0) / 20) * 100))}
+                title="Visit Pipeline"
+                desc="Keep 20+ visits scheduled in period"
+                unlocked={(breakdown?.scheduledVisitsCount ?? 0) >= 20}
+                progress={Math.min(100, Math.round(((breakdown?.scheduledVisitsCount ?? 0) / 20) * 100))}
                 icon="🔥"
               />
             </div>
@@ -580,9 +583,9 @@ export function GoalsPage() {
         </Card>
       )}
 
-      {save.error && (
+      {(save.error || addManual.error) && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <ErrorText error={save.error} />
+          <ErrorText error={save.error ?? addManual.error} />
         </div>
       )}
     </div>
@@ -595,6 +598,7 @@ function PillarCard({
   goal,
   daysRemaining,
   onSave,
+  onAddManual,
   pending,
 }: {
   metric: GoalMetric
@@ -602,6 +606,7 @@ function PillarCard({
   goal?: GoalRow
   daysRemaining: number
   onSave: (target: number) => void
+  onAddManual: (delta: number) => void
   pending: boolean
 }) {
   const cfg = METRIC_CONFIG[metric]
@@ -614,6 +619,9 @@ function PillarCard({
 
   const [isEditing, setIsEditing] = useState(false)
   const [raw, setRaw] = useState(() => toInput(metric, currentTarget))
+  const [loggingDone, setLoggingDone] = useState(false)
+  const [doneRaw, setDoneRaw] = useState('')
+  const manual = goal?.manual ?? 0
 
   const handleSave = (val: string) => {
     const next = fromInput(metric, val)
@@ -704,6 +712,21 @@ function PillarCard({
               </div>
             </div>
 
+            {manual > 0 && (
+              <p className="mt-2 text-[11px] font-medium text-emerald-600">
+                Includes {goalValue(metric, manual)} added by hand
+                <button
+                  type="button"
+                  onClick={() => onAddManual(-manual)}
+                  disabled={pending}
+                  className="ml-1.5 text-slate-400 hover:text-red-500"
+                  title="Remove the manual entries"
+                >
+                  reset
+                </button>
+              </p>
+            )}
+
             {/* Motivational pace snippet */}
             <p className="mt-2 text-xs text-slate-500 leading-normal">{paceText}</p>
           </div>
@@ -711,7 +734,43 @@ function PillarCard({
 
         {/* Footer: Quick Adjust / Set Target */}
         <div className="mt-4 pt-3 border-t border-slate-100">
-          {!isEditing ? (
+          {loggingDone ? (
+            <form
+              onSubmit={e => {
+                e.preventDefault()
+                const delta = fromInput(metric, doneRaw)
+                if (delta > 0) onAddManual(delta)
+                setLoggingDone(false)
+              }}
+              className="space-y-1.5"
+            >
+              <label className="block text-[11px] font-medium text-slate-500">
+                Completed outside the CRM
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min="0"
+                  step={metric === 'revenue' ? '0.1' : '1'}
+                  value={doneRaw}
+                  onChange={e => setDoneRaw(e.target.value)}
+                  placeholder={metric === 'revenue' ? 'Cr booked' : `${cfg.unit} done`}
+                  className={`${inputCls} w-full py-1 text-xs`}
+                  autoFocus
+                />
+                <Button type="submit" disabled={pending} className="px-2.5 py-1 text-xs">
+                  Add
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setLoggingDone(false)}
+                  className="rounded-md p-1 text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              </div>
+            </form>
+          ) : !isEditing ? (
             <div className="flex items-center justify-between">
               <button
                 type="button"
@@ -726,15 +785,29 @@ function PillarCard({
               </button>
 
               {currentTarget > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onSave(0)}
-                  disabled={pending}
-                  className="text-[11px] text-slate-400 hover:text-red-500 transition"
-                  title="Clear this target"
-                >
-                  Clear
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDoneRaw('')
+                      setLoggingDone(true)
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 transition"
+                    title="Add work you completed outside the CRM"
+                  >
+                    <Plus className="size-3" />
+                    Log done
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSave(0)}
+                    disabled={pending}
+                    className="text-[11px] text-slate-400 hover:text-red-500 transition"
+                    title="Clear this target"
+                  >
+                    Clear
+                  </button>
+                </div>
               )}
             </div>
           ) : (

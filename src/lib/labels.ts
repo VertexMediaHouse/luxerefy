@@ -46,7 +46,7 @@ export const NEXT_ACTIONS: TaskKind[] = ['call', 'text', 'meeting', 'site_visit'
 
 export const GOAL_PERIOD_LABEL: Record<GoalPeriod, string> = { weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' }
 export const GOAL_PERIODS: GoalPeriod[] = ['weekly', 'monthly', 'yearly']
-export const GOAL_METRIC_LABEL: Record<GoalMetric, string> = { leads: 'New leads', won: 'Leads won', revenue: 'Revenue booked', site_visits: 'Site visits done' }
-export const GOAL_METRICS: GoalMetric[] = ['leads', 'won', 'revenue', 'site_visits']
+export const GOAL_METRIC_LABEL: Record<GoalMetric, string> = { potential_visits: 'Potential visits', site_visits: 'Site visits done', builder_meetings: 'Potential meetings with builders', revenue: 'Revenue booked' }
+export const GOAL_METRICS: GoalMetric[] = ['potential_visits', 'site_visits', 'builder_meetings', 'revenue']
 
 export const DOC_FOLDERS: DocFolder[] = ['Company Brochures', 'General Documents', 'Agreements', 'KYC', 'Other']

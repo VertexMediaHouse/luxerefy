@@ -14,7 +14,7 @@ export type TicketStatus = 'pending' | 'in_progress' | 'resolved'
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent'
 export type TaskKind = 'call' | 'text' | 'follow_up' | 'site_visit' | 'meeting' | 'other'
 export type GoalPeriod = 'weekly' | 'monthly' | 'yearly'
-export type GoalMetric = 'leads' | 'won' | 'revenue' | 'site_visits'
+export type GoalMetric = 'potential_visits' | 'site_visits' | 'builder_meetings' | 'revenue'
 
 export interface Profile { id: string; full_name: string; email: string; phone: string; role: Role; active: boolean }
 
@@ -75,6 +75,8 @@ export interface Ticket {
 /** One target per (period, metric). Progress is always measured against the period in progress. */
 export interface Goal {
   id: string; period: GoalPeriod; metric: GoalMetric; target: number
+  /** Work completed outside the CRM, added by hand on top of the counted actual. */
+  manual?: number
   created_at: string; updated_at: string
 }
 

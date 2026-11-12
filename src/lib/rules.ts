@@ -183,13 +183,15 @@ export function periodRange(period: GoalPeriod, now = new Date()) {
  * ponytail: a won lead is dated by `updated_at`, since the stage change is its last write.
  * Add a `won_at` column if a lead can be edited after closing.
  */
-export function goalProgress(t: Tables, goal: Pick<Goal, 'period' | 'metric'>, now = new Date()) {
+export function goalProgress(t: Tables, goal: Pick<Goal, 'period' | 'metric' | 'manual'>, now = new Date()) {
   const { start, end } = periodRange(goal.period, now)
   const within = (iso: string) => { const d = Date.parse(iso); return d >= start.getTime() && d < end.getTime() }
-  if (goal.metric === 'leads') return t.leads.filter(l => within(l.created_at)).length
-  if (goal.metric === 'won') return t.leads.filter(l => isWon(l) && within(l.updated_at)).length
-  if (goal.metric === 'revenue') return t.leads.filter(l => isWon(l) && within(l.updated_at)).reduce((v, l) => v + (l.budget_max ?? l.budget_min ?? 0), 0)
-  return t.tasks.filter(k => k.kind === 'site_visit' && k.status === 'done' && within(k.due_at)).length
+  const manual = goal.manual ?? 0
+  // Visits still ahead of us in the period, so the number is a pipeline and not a result.
+  if (goal.metric === 'potential_visits') return manual + t.tasks.filter(k => k.kind === 'site_visit' && k.status === 'pending' && within(k.due_at)).length
+  if (goal.metric === 'builder_meetings') return manual + t.tasks.filter(k => k.kind === 'meeting' && k.status !== 'cancelled' && within(k.due_at)).length
+  if (goal.metric === 'revenue') return manual + t.leads.filter(l => isWon(l) && within(l.updated_at)).reduce((v, l) => v + (l.budget_max ?? l.budget_min ?? 0), 0)
+  return manual + t.tasks.filter(k => k.kind === 'site_visit' && k.status === 'done' && within(k.due_at)).length
 }
 
 export const SLA_HOURS: Record<TicketPriority, number> = { urgent: 4, high: 24, normal: 48, low: 72 }

@@ -262,13 +262,13 @@ export function seed(): Tables {
   const goal = (period: GoalPeriod, metric: GoalMetric, target: number): Goal =>
     ({ id: `g-${period}-${metric}`, period, metric, target, created_at: at(-1000), updated_at: at(-1000) })
   t.goals = [
-    goal('weekly', 'leads', 8),
+    goal('weekly', 'potential_visits', 8),
     goal('weekly', 'site_visits', 3),
-    goal('monthly', 'leads', 30),
-    goal('monthly', 'won', 3),
-    goal('monthly', 'revenue', 12 * CR),
+    goal('monthly', 'potential_visits', 30),
     goal('monthly', 'site_visits', 12),
-    goal('yearly', 'won', 30),
+    goal('monthly', 'builder_meetings', 6),
+    goal('monthly', 'revenue', 12 * CR),
+    goal('yearly', 'builder_meetings', 60),
     goal('yearly', 'revenue', 120 * CR),
   ]
 
