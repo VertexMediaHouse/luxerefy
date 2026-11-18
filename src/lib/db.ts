@@ -1,80 +1,78 @@
-// In-browser stand-in for Supabase: tables live in localStorage, seeded from lib/mock/seed.ts.
-// Keeps the exact export surface the Supabase-backed version had, so feature api.ts files are unchanged.
-// ponytail: single-browser demo store. Restore the Supabase version (git show 501716f:src/lib/db.ts)
-// once a live project exists again.
-import { captureLead, escalateTickets, type CaptureInput } from './rules'
-import { seed } from './mock/seed'
+// Supabase-backed store. `db` is a live mirror of the rows the current user's RLS allows, so the
+// query hooks and render-time helpers (stages.ts, LeadBoard) can keep reading it synchronously.
+// `write(fn)` runs the real Supabase calls in fn, then refreshes the mirror so every hook sees
+// the new state. Anon visitors (public property page, sales form) get the same mirror, which RLS
+// narrows to public properties — every other table simply comes back empty.
+import { supabase } from './supabase'
 import type { Tables } from './types'
 
-const KEY = 'luxerefy-crm-mock-v5'
-
-function restore(): Tables {
-  try {
-    const raw = localStorage.getItem(KEY)
-    if (raw) {
-      const t = JSON.parse(raw) as Tables
-      // A store written before a table existed would render blank, so re-seed instead of patching.
-      if (t.pipelines?.length && t.stages?.length && t.goals && t.doc_folders) return t
-    }
-  } catch { /* unreadable storage → fresh seed */ }
-  return seed()
+export const db: Tables = {
+  profiles: [], contacts: [], properties: [], pipelines: [], stages: [], leads: [],
+  lead_activities: [], tasks: [], tickets: [], documents: [], doc_folders: [], goals: [],
 }
 
-export const db: Tables = restore()
+const TABLES = Object.keys(db) as (keyof Tables)[]
 
-export function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { /* demo edits just won't survive a reload */ }
-}
-
-export function resetDemo() {
-  try { localStorage.removeItem(KEY) } catch { /* nothing to clear */ }
-  location.reload()
-}
-
-/** No-ops: there is no server to sync with. Kept so session.tsx and BackupPage need no changes. */
-export const load = async () => {}
-export const reload = async () => {}
-
-/** Simulated round-trip. Returns a copy so cached query data never aliases the store. */
-export const respond = <T,>(value: T) => new Promise<T>(r => setTimeout(() => r(structuredClone(value)), 120))
-
-const friendly = (e: unknown) => (e instanceof Error ? e : new Error('Something went wrong'))
-
-/** Run a write against the store, persist, respond. Throwing inside fn rejects like a failed RLS check. */
-export async function write<T>(fn: () => T) {
-  try {
-    const out = fn()
-    save()
-    return structuredClone(out)
-  } catch (e) {
-    throw friendly(e)
-  }
-}
-
-/** Local port of the capture_leads RPC (supabase/schema.sql): dedupes by phone, logs a repeat enquiry. */
-export async function captureRemote(rows: object[]) {
-  const actor = db.profiles.find(p => p.active) ?? null
-  const out = rows.map(r => {
-    try {
-      const { lead, created } = captureLead(db, r as CaptureInput, actor)
-      return { id: lead.id, created }
-    } catch (e) {
-      return { error: (e as Error).message }
-    }
+/** Pull every readable row into the mirror. Throws on a real failure (bad key, project down). */
+export async function refresh() {
+  const results = await Promise.all(TABLES.map(t => supabase.from(t).select('*')))
+  results.forEach((r, i) => {
+    if (r.error) throw new Error(`${TABLES[i]}: ${r.error.message}`)
+    ;(db[TABLES[i]] as unknown[]) = r.data ?? []
   })
-  save()
-  return out as ({ id: string; created: boolean; error?: undefined } | { error: string })[]
 }
 
-/** Replace whole tables (backup restore). */
+/** Bootstrap / re-bootstrap the mirror. Kept as two names because session.tsx and BackupPage use both. */
+export const load = refresh
+export const reload = refresh
+
+/** Kept so call sites that just hand back a value don't need to change. */
+export const respond = <T,>(value: T) => Promise.resolve(value)
+
+/** Run a real write against Supabase, then refresh the mirror. Throwing inside fn rejects like a failed RLS check. */
+export async function write<T>(fn: () => T | Promise<T>): Promise<T> {
+  const out = await fn()
+  await refresh()
+  return out
+}
+
+/** Throw PostgREST errors as plain Errors, so the existing mutation error UI needs no change. */
+export function ok<T>(r: { data: T; error: { message: string } | null }): T {
+  if (r.error) throw new Error(r.error.message)
+  return r.data
+}
+
+export type CaptureResult = { id: string; created: boolean; error?: undefined } | { error: string }
+
+/**
+ * The capture_leads RPC: dedupes by phone, logs the activity, books the 99acres call.
+ * Security definer, granted to anon, so the public forms reach it without reading any table.
+ */
+export async function captureRemote(rows: object[]): Promise<CaptureResult[]> {
+  const { data, error } = await supabase.rpc('capture_leads', { rows })
+  if (error) throw new Error(error.message)
+  // Anon has no select grant, so only a signed-in caller can see the new rows.
+  await refresh().catch(() => {})
+  return (data ?? []) as CaptureResult[]
+}
+
+/**
+ * Replace whole tables (backup restore). Profiles are left alone: they belong to Supabase Auth.
+ * Children go first on the way out and last on the way in, so FKs hold at every step.
+ */
 export async function replaceAll(tables: Partial<Tables>) {
-  return write(() => {
-    for (const t of Object.keys(db) as (keyof Tables)[])
-      if (t !== 'profiles' && Array.isArray(tables[t])) (db as unknown as Record<string, unknown>)[t] = tables[t]
-  })
+  const order: (keyof Tables)[] = [
+    'pipelines', 'stages', 'contacts', 'properties', 'leads',
+    'lead_activities', 'tasks', 'tickets', 'doc_folders', 'documents', 'goals',
+  ]
+  for (const t of [...order].reverse())
+    if (Array.isArray(tables[t])) ok(await supabase.from(t).delete().neq('id', ''))
+  for (const t of order) {
+    const rows = tables[t]
+    if (Array.isArray(rows) && rows.length) ok(await supabase.from(t).insert(rows as never))
+  }
+  await refresh()
 }
 
-/** Stand-in for a pg_cron escalation job: runs whenever ticket data is read. */
-export function cron() {
-  if (escalateTickets(db)) save()
-}
+/** Escalation runs server-side (pg_cron calling the SQL escalation job); nothing to do in the browser. */
+export function cron() {}

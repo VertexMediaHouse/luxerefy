@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cron, db, respond, write } from '../../lib/db'
-import { canSeeTicket, soleOwner, uid } from '../../lib/rules'
+import { cron, db, ok, respond, write } from '../../lib/db'
+import { supabase } from '../../lib/supabase'
+import { canSeeTicket, soleOwner } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import type { Profile, Ticket, TicketStatus } from '../../lib/types'
 
@@ -35,24 +36,19 @@ export function useCreateTicket() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (f: { title: string; description: string }) =>
-      write(() => {
+      write(async () => {
         if (!f.title.trim()) throw new Error('Enter a subject')
         if (!f.description.trim()) throw new Error('Enter a body description')
-        const created_at = new Date().toISOString()
-        const t: Ticket = {
-          id: uid(),
+        // An agent cannot see every ticket, so the number guessed here can collide; the
+        // ticket_number trigger renumbers it server side when it does.
+        return ok(await supabase.from('tickets').insert({
           number: Math.max(0, ...db.tickets.map(t => t.number)) + 1,
           title: f.title.trim(),
           description: f.description.trim(),
           status: 'pending',
           raised_by: user.id,
           assigned_to: soleOwner(db)?.id ?? null,
-          in_progress_at: null,
-          resolved_at: null,
-          created_at,
-        }
-        db.tickets.push(t)
-        return t
+        }).select().single()) as Ticket
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
@@ -66,15 +62,16 @@ export function useUpdateTicket() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status?: TicketStatus }) =>
-      write(() => {
+      write(async () => {
         const t = db.tickets.find(t => t.id === id)
         if (!t || !canSeeTicket(user, t)) throw new Error('Ticket not found')
+        if (!status || status === t.status) return
         const now = new Date().toISOString()
-        if (status && status !== t.status) {
-          t.status = status
-          if (status === 'in_progress') t.in_progress_at ??= now
-          t.resolved_at = status === 'resolved' ? now : null
-        }
+        ok(await supabase.from('tickets').update({
+          status,
+          in_progress_at: status === 'in_progress' ? t.in_progress_at ?? now : t.in_progress_at,
+          resolved_at: status === 'resolved' ? now : null,
+        }).eq('id', id))
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
@@ -82,4 +79,3 @@ export function useUpdateTicket() {
     },
   })
 }
-

@@ -17,8 +17,12 @@ export const TABLES = [
 
 export interface BackupFile { version: number; taken_at: string; tables: Tables }
 
-export const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1ujrd3jGs16QELkn1yqR5xM8VTCYcbBaRGiH780UbBFg/edit'
-export const GOOGLE_SCRIPT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzp5XKxbhFneHORqL4FlfJ1HIUpy6rY_GauTS5av_nsaeEAQs7DibR-upff0TR0xMQ8/exec'
+export const GOOGLE_SHEET_URL =
+  (import.meta.env.VITE_GOOGLE_SHEET_URL as string | undefined) ||
+  'https://docs.google.com/spreadsheets/d/1ujrd3jGs16QELkn1yqR5xM8VTCYcbBaRGiH780UbBFg/edit'
+export const GOOGLE_SCRIPT_WEBAPP_URL =
+  (import.meta.env.VITE_GOOGLE_SCRIPT_WEBAPP_URL as string | undefined) ||
+  'https://script.google.com/macros/s/AKfycbzp5XKxbhFneHORqL4FlfJ1HIUpy6rY_GauTS5av_nsaeEAQs7DibR-upff0TR0xMQ8/exec'
 
 export const takenAt = (key: string) => key.slice(PREFIX.length)
 

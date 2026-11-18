@@ -1,13 +1,13 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { db, respond, write } from '../../lib/db'
-import { deleteFile, getFile, putFile } from '../../lib/mock/files'
-import { canSeeLead, isManager, logActivity, uid } from '../../lib/rules'
+import { db, ok, respond, write } from '../../lib/db'
+import { supabase } from '../../lib/supabase'
+import { canSeeLead, isManager, uid } from '../../lib/rules'
 import { useUser } from '../../lib/session'
-import type { Doc, DocFolderItem, Profile } from '../../lib/types'
+import type { Doc, Profile } from '../../lib/types'
 
 const MAX_BYTES = 20 * 1024 * 1024
 
-/** Storage RLS stand-in: client paperwork follows the lead; property-only docs are visible to all staff. */
+/** RLS already scopes db.documents; this repeats the rule so a scoped list reads the same. */
 const canSeeDoc = (user: Profile, d: Doc) => {
   if (isManager(user) || !d.lead_id) return true
   const lead = db.leads.find(l => l.id === d.lead_id)
@@ -39,33 +39,20 @@ export function useFolders() {
 export function useCreateFolder() {
   return useMutation({
     mutationFn: ({ name, parent_id = null, color = 'blue', icon = 'folder' }: { name: string; parent_id?: string | null; color?: string; icon?: string }) =>
-      write(() => {
-        if (!db.doc_folders) db.doc_folders = []
-        const newFolder: DocFolderItem = {
-          id: `f-${uid().slice(0, 8)}`,
-          name: name.trim(),
-          parent_id: parent_id || null,
-          color,
-          icon,
-          created_at: new Date().toISOString(),
-        }
-        db.doc_folders.push(newFolder)
-        return newFolder
-      }),
+      write(async () =>
+        ok(await supabase.from('doc_folders').insert({
+          id: `f-${uid().slice(0, 8)}`, name: name.trim(), parent_id: parent_id || null, color, icon,
+        }).select().single())),
   })
 }
 
 export function useDeleteFolder() {
   return useMutation({
     mutationFn: (folderId: string) =>
-      write(() => {
-        if (!db.doc_folders) return
-        db.doc_folders = db.doc_folders.filter(f => f.id !== folderId && f.parent_id !== folderId)
-        db.documents.forEach(d => {
-          if (d.folder_id === folderId) {
-            d.folder_id = null
-          }
-        })
+      write(async () => {
+        // documents.folder_id is "on delete set null", and doc_folders.parent_id cascades,
+        // so removing the folder detaches its files and its subfolders go with it.
+        ok(await supabase.from('doc_folders').delete().eq('id', folderId))
       }),
   })
 }
@@ -73,12 +60,10 @@ export function useDeleteFolder() {
 export function useToggleStarDoc() {
   return useMutation({
     mutationFn: (id: string) =>
-      write(() => {
+      write(async () => {
         const d = db.documents.find(doc => doc.id === id)
-        if (d) {
-          d.starred = !d.starred
-        }
-        return d
+        if (!d) throw new Error('Document not found')
+        return ok(await supabase.from('documents').update({ starred: !d.starred }).eq('id', id).select().single()) as Doc
       }),
   })
 }
@@ -106,20 +91,27 @@ export function useUploadDocument() {
       if (lead_id && (!lead || !canSeeLead(user, lead))) throw new Error('Lead not found')
       const id = uid()
       const storage_path = `${lead_id ? `lead/${lead_id}` : property_id ? `property/${property_id}` : 'general'}/${id}-${file.name.replace(/[^\w.-]+/g, '_')}` // storage keys reject some characters
-      await putFile(storage_path, file)
-      return write(() => {
-        const now = new Date().toISOString()
+      const up = await supabase.storage.from('documents').upload(storage_path, file, { contentType: file.type || 'application/octet-stream' })
+      if (up.error) throw new Error(up.error.message)
+      return write(async () => {
         const resolvedFolder = folder || (folder_id ? db.doc_folders?.find(f => f.id === folder_id)?.name : 'General Documents') || 'General Documents'
-        const doc: Doc = {
-          id, folder: resolvedFolder, folder_id: folder_id ?? null,
-          lead_id: lead_id ?? null, property_id: property_id ?? null,
-          name: file.name, size: file.size, mime: file.type || 'application/octet-stream',
-          storage_path,
-          uploaded_by: user.id, created_at: now, starred: false,
+        try {
+          const doc = ok(await supabase.from('documents').insert({
+            id, folder: resolvedFolder, folder_id: folder_id ?? null,
+            lead_id: lead_id ?? null, property_id: property_id ?? null,
+            name: file.name, size: file.size, mime: file.type || 'application/octet-stream',
+            storage_path, uploaded_by: user.id, starred: false,
+          }).select().single()) as Doc
+          if (lead_id)
+            ok(await supabase.from('lead_activities').insert({
+              lead_id, type: 'note', body: `Uploaded ${resolvedFolder} document: ${file.name}`, meta: {}, actor_id: user.id,
+            }))
+          return doc
+        } catch (e) {
+          // Don't leave an orphan blob in the bucket that nothing can ever read or delete.
+          await supabase.storage.from('documents').remove([storage_path])
+          throw e
         }
-        db.documents.push(doc)
-        if (lead_id) logActivity(db, lead_id, 'note', `Uploaded ${resolvedFolder} document: ${file.name}`, user.id, now)
-        return doc
       })
     },
   })
@@ -131,16 +123,18 @@ export function useDeleteDocument() {
     mutationFn: async (id: string) => {
       const d = db.documents.find(d => d.id === id)
       if (!d || !(isManager(user) || d.uploaded_by === user.id)) throw new Error('Only managers or the uploader can delete this document.')
-      await deleteFile(d.storage_path)
-      return write(() => { db.documents = db.documents.filter(x => x.id !== id) })
+      // The storage delete policy reads the documents row, so the blob has to go first.
+      const rm = await supabase.storage.from('documents').remove([d.storage_path])
+      if (rm.error) throw new Error(rm.error.message)
+      return write(async () => { ok(await supabase.from('documents').delete().eq('id', id)) })
     },
   })
 }
 
 export async function downloadDocument(d: Doc) {
-  const blob = await getFile(d.storage_path)
-  if (!blob) return alert('The file for this document could not be found in storage.')
-  const url = URL.createObjectURL(blob)
+  const { data, error } = await supabase.storage.from('documents').download(d.storage_path)
+  if (error || !data) return alert('The file for this document could not be found in storage.')
+  const url = URL.createObjectURL(data)
   const a = Object.assign(document.createElement('a'), { href: url, download: d.name })
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)

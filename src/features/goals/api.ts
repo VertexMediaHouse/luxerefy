@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { db, respond, write } from '../../lib/db'
-import { goalProgress, isWon, periodRange, uid } from '../../lib/rules'
+import { db, ok, respond, write } from '../../lib/db'
+import { supabase } from '../../lib/supabase'
+import { goalProgress, isWon, periodRange } from '../../lib/rules'
 import type { Goal, GoalMetric, GoalPeriod } from '../../lib/types'
 
 export type GoalRow = Goal & { actual: number }
@@ -21,21 +22,15 @@ export function useSaveGoal() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ period, metric, target }: { period: GoalPeriod; metric: GoalMetric; target: number }) =>
-      write(() => {
+      write(async () => {
         if (!Number.isFinite(target) || target < 0) throw new Error('Enter a target of zero or more')
-        const now = new Date().toISOString()
-        const existing = db.goals.find(g => g.period === period && g.metric === metric)
         if (target === 0) {
-          db.goals = db.goals.filter(g => g !== existing)
+          ok(await supabase.from('goals').delete().eq('period', period).eq('metric', metric))
           return null
         }
-        if (existing) {
-          Object.assign(existing, { target, updated_at: now })
-          return existing
-        }
-        const g: Goal = { id: uid(), period, metric, target, created_at: now, updated_at: now }
-        db.goals.push(g)
-        return g
+        // (period, metric) is unique, so this is one upsert rather than a read then a write.
+        return ok(await supabase.from('goals').upsert({ period, metric, target }, { onConflict: 'period,metric' })
+          .select().single()) as Goal
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goals'] })
@@ -51,14 +46,15 @@ export function useAddGoalManual() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ period, metric, delta }: { period: GoalPeriod; metric: GoalMetric; delta: number }) =>
-      write(() => {
+      write(async () => {
         if (!Number.isFinite(delta) || delta === 0) throw new Error('Enter an amount to add')
-        const now = new Date().toISOString()
         const existing = db.goals.find(g => g.period === period && g.metric === metric)
         if (!existing) throw new Error('Set a target first')
-        existing.manual = Math.max(0, (existing.manual ?? 0) + delta)
-        existing.updated_at = now
-        return existing
+        // ponytail: read-modify-write. Two people adding at the same moment lose one entry;
+        // move it into a SQL `manual = manual + delta` function if that ever matters.
+        return ok(await supabase.from('goals')
+          .update({ manual: Math.max(0, (existing.manual ?? 0) + delta) })
+          .eq('id', existing.id).select().single()) as Goal
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goals'] })

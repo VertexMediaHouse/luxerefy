@@ -42,6 +42,14 @@ export function seed(): Tables {
     ({ id: 'p-' + slug, slug, city: 'Ahmedabad', created_at: at(-age), updated_at: at(-age / 2), ...p })
 
   const properties: Property[] = [
+    // The CP landing page for the Venus Infrastructure launch: /p/the-universe?cp=<partner>
+    prop('the-universe', {
+      title: 'The Universe', project: 'The Universe by Venus Infrastructure', config: '4 & 5 BHK Sky Residences', area_sqft: 4600, price: 5.75 * CR, locality: 'Sindhu Bhavan Road',
+      segment: 'residential', category: 'apartment',
+      description: 'A launch-stage tower of 4 and 5 BHK sky residences above a 40,000 sq ft clubhouse, on Sindhu Bhavan Road. Two homes per floor, private lift lobbies and a landscaped podium deck.',
+      amenities: amenities.slice(0, 9), images: ['1545324418-cc1a3fa10c00', '1600607687939-ce8a6c25118c', '1600566753190-17f0baa2a6c3', '1613490493576-7fde63acd811'].map(img),
+      specs: { Possession: 'Dec 2028', Launch: 'Pre-launch', Clubhouse: '40,000 sq ft', Parking: '3 covered', Furnishing: 'Bare shell', RERA: 'Application filed' }, status: 'available', is_public: true,
+    }, 30),
     prop('aurelia-sky-villa-shela', {
       title: 'Aurelia Sky Villa', project: 'Aurelia Residences', config: '5 BHK Sky Villa', area_sqft: 6200, price: 6.5 * CR, locality: 'Shela',
       segment: 'residential', category: 'apartment',

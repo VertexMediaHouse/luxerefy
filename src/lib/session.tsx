@@ -1,9 +1,9 @@
-// Mock session: the signed-in user is a profiles row id kept in localStorage.
-// ponytail: demo auth, any password works. Restore the Supabase version
-// (git show 501716f:src/lib/session.tsx) once a live project exists again.
-import { createContext, useContext, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { db, respond } from './db'
+// Real Supabase Auth. The signed-in user is their `profiles` row, which the on_auth_user_created
+// trigger creates on sign-up (the first account becomes the owner).
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from './supabase'
+import { db, refresh } from './db'
 import type { Profile } from './types'
 
 interface Ctx {
@@ -15,31 +15,44 @@ interface Ctx {
 }
 const SessionCtx = createContext<Ctx | null>(null)
 
-const KEY = 'luxerefy-crm-session'
-
 export const useProfiles = () =>
-  useQuery({ queryKey: ['profiles'], queryFn: () => respond(db.profiles), initialData: () => structuredClone(db.profiles) })
+  useQuery({ queryKey: ['profiles'], queryFn: () => Promise.resolve(db.profiles), initialData: () => db.profiles })
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [userId, setUserId] = useState<string | null>(() => {
-    try { return localStorage.getItem(KEY) } catch { return null }
-  })
+  const [userId, setUserId] = useState<string | null>(null)
+  // The mirror has to be filled before the first render: the public pages and stages.ts read `db`
+  // synchronously, with no hook to suspend on.
+  const [ready, setReady] = useState(false)
+  const [profiles, setProfiles] = useState<Profile[]>(db.profiles)
+  const qc = useQueryClient()
 
-  const { data: profiles } = useProfiles()
+  useEffect(() => {
+    let live = true
+    const sync = async (id: string | null) => {
+      // A failed refresh (project unreachable) must not leave the app stuck on a blank screen.
+      await refresh().catch(e => console.error('Supabase load failed:', e))
+      if (!live) return
+      setProfiles([...db.profiles])
+      setUserId(id)
+      setReady(true)
+    }
+    supabase.auth.getSession().then(({ data }) => sync(data.session?.user.id ?? null))
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) void sync(session.user.id)
+      else { qc.clear(); void sync(null) }
+    })
+    return () => { live = false; sub.subscription.unsubscribe() }
+  }, [qc])
+
   const user = profiles.find(p => p.id === userId && p.active) ?? null
 
-  const signIn = async (email: string, _password: string) => {
-    const match = db.profiles.find(p => p.email.toLowerCase() === email.trim().toLowerCase())
-    if (!match) return 'No account with that email.'
-    if (!match.active) return 'Your account is not active.'
-    try { localStorage.setItem(KEY, match.id) } catch { /* session just won't survive a reload */ }
-    setUserId(match.id)
-    return null
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+    return error ? error.message : null
   }
-  const signOut = () => {
-    try { localStorage.removeItem(KEY) } catch { /* nothing to clear */ }
-    setUserId(null)
-  }
+  const signOut = () => { void supabase.auth.signOut() }
+
+  if (!ready) return null
 
   return (
     <SessionCtx.Provider value={{ user, blocked: !!userId && !user, signIn, signOut }}>{children}</SessionCtx.Provider>

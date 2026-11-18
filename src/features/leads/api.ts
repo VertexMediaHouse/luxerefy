@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { captureRemote, db, respond, write } from '../../lib/db'
-import { canSeeLead, findClash, isLost, isOpen, isWon, logActivity, parse99acres, uid, type CaptureInput } from '../../lib/rules'
+import { captureRemote, db, ok, respond, write } from '../../lib/db'
+import { supabase } from '../../lib/supabase'
+import { canSeeLead, findClash, isLost, isOpen, isWon, parse99acres, uid, type CaptureInput } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { stage, stageLabel } from '../../lib/stages'
 import { dateTime } from '../../lib/format'
 import { TASK_KIND_LABEL } from '../../lib/labels'
-import type { Lead, LeadStatus, LeadType, Profile, Property, TaskKind } from '../../lib/types'
+import type { ActivityType, Lead, LeadStatus, LeadType, Profile, Property, TaskKind } from '../../lib/types'
 
 const byNewest = (a: { created_at: string }, b: { created_at: string }) => b.created_at.localeCompare(a.created_at)
 
@@ -67,6 +68,10 @@ export function useLead(id: string) {
   })
 }
 
+/** The timeline insert, server side. Mirrors logActivity in rules.ts, which now only runs in the check. */
+const logRemote = (lead_id: string, type: ActivityType, body: string, actor_id: string | null, meta: Record<string, unknown> = {}) =>
+  supabase.from('lead_activities').insert({ lead_id, type, body, meta, actor_id }).then(ok)
+
 function ownLead(user: Profile, id: string) {
   const l = db.leads.find(l => l.id === id)
   if (!l || !canSeeLead(user, l)) throw new Error('Lead not found')
@@ -77,20 +82,21 @@ function ownLead(user: Profile, id: string) {
  * One stage change, shared by the detail page's stepper and the board's drag-and-drop.
  * Dropping onto another pipeline's column moves the lead to that pipeline too.
  */
-function applyStatus(user: Profile, id: string, status: LeadStatus, reason?: string) {
+async function applyStatus(user: Profile, id: string, status: LeadStatus, reason?: string) {
   const l = ownLead(user, id)
   if (l.status === status) return
-  const now = new Date().toISOString()
-  // Mirrors the partial unique index: one open lead per contact.
+  // Mirrors the partial unique index: one open lead per contact. Checked here for the clearer message;
+  // the index is still the thing that actually enforces it.
   if (!isOpen(l) && isOpen({ status }) && db.leads.some(o => o.id !== id && o.contact_id === l.contact_id && isOpen(o)))
     throw new Error('This contact already has another open lead.')
-  logActivity(db, id, 'status_change', `Stage changed from ${stageLabel(l.status)} to ${stageLabel(status)}${reason ? ` — ${reason}` : ''}`, user.id, now)
-  Object.assign(l, {
+  await logRemote(id, 'status_change', `Stage changed from ${stageLabel(l.status)} to ${stageLabel(status)}${reason ? ` — ${reason}` : ''}`, user.id)
+  ok(await supabase.from('leads').update({
     status, pipeline_id: stage(status)?.pipeline_id ?? l.pipeline_id,
-    lost_reason: isLost({ status }) ? reason ?? null : null, updated_at: now,
-  })
+    lost_reason: isLost({ status }) ? reason ?? null : null,
+  }).eq('id', id))
   const contact = db.contacts.find(c => c.id === l.contact_id)
-  if (isWon({ status }) && contact?.kind === 'lead') contact.kind = 'client'
+  if (isWon({ status }) && contact?.kind === 'lead')
+    ok(await supabase.from('contacts').update({ kind: 'client' }).eq('id', contact.id))
 }
 
 /** Board drag-and-drop. Separate from useLeadActions because the card is not the open lead. */
@@ -149,13 +155,10 @@ export function useDeleteLead() {
   const user = useUser()
   return useMutation({
     mutationFn: (id: string) =>
-      write(() => {
+      write(async () => {
         const l = ownLead(user, id)
-        db.leads = db.leads.filter(x => x.id !== id)
-        db.lead_activities = db.lead_activities.filter(a => a.lead_id !== id)
-        db.tasks = db.tasks.filter(t => t.lead_id !== id)
-        db.documents = db.documents.filter(d => d.lead_id !== id)
-        db.tickets = db.tickets.filter(t => t.lead_id !== id)
+        // activities, tasks, documents and tickets all hang off leads with on delete cascade / set null.
+        ok(await supabase.from('leads').delete().eq('id', id))
         return l
       }),
   })
@@ -163,7 +166,8 @@ export function useDeleteLead() {
 
 export function useLeadActions(id: string) {
   const user = useUser()
-  const now = () => new Date().toISOString()
+  /** Bump the lead so "last activity" sorting stays honest. The set_leads_updated_at trigger supplies now(). */
+  const touch = async () => ok(await supabase.from('leads').update({ updated_at: new Date().toISOString() }).eq('id', id))
   return {
     setStatus: useMutation({
       mutationFn: ({ status, reason }: { status: LeadStatus; reason?: string }) =>
@@ -171,18 +175,18 @@ export function useLeadActions(id: string) {
     }),
     log: useMutation({
       mutationFn: ({ type, body }: { type: 'call' | 'note' | 'text'; body: string }) =>
-        write(() => {
-          ownLead(user, id).updated_at = now()
-          logActivity(db, id, type, body, user.id, now())
+        write(async () => {
+          ownLead(user, id)
+          await logRemote(id, type, body, user.id)
+          await touch()
         }),
     }),
     /** Free-text scratchpad. Replaces the whole field, so the textarea is the source of truth. */
     saveNotes: useMutation({
       mutationFn: (notes: string) =>
-        write(() => {
-          const l = ownLead(user, id)
-          l.notes = notes
-          l.updated_at = now()
+        write(async () => {
+          ownLead(user, id)
+          ok(await supabase.from('leads').update({ notes }).eq('id', id))
         }),
     }),
     /** Update profile and requirement details (looking for, locality, project, type, budget, etc). */
@@ -199,41 +203,37 @@ export function useLeadActions(id: string) {
         phone?: string
         email?: string | null
       }) =>
-        write(() => {
+        write(async () => {
           const l = ownLead(user, id)
-          if (data.property_interest !== undefined) l.property_interest = data.property_interest
-          if (data.locality !== undefined) l.locality = data.locality
-          if (data.project !== undefined) l.project = data.project
-          if (data.lead_type !== undefined) l.lead_type = data.lead_type
-          if (data.budget_min !== undefined) l.budget_min = data.budget_min
-          if (data.budget_max !== undefined) l.budget_max = data.budget_max
-          if (data.city !== undefined) l.city = data.city
-          l.updated_at = now()
+          const { name, phone, email, ...lead } = data
+          // Only the keys actually supplied travel, so a blank form field never wipes a stored value.
+          const patch = Object.fromEntries(Object.entries(lead).filter(([, v]) => v !== undefined))
+          if (Object.keys(patch).length) ok(await supabase.from('leads').update(patch).eq('id', id))
 
-          if (data.name !== undefined || data.phone !== undefined || data.email !== undefined) {
-            const contact = db.contacts.find(c => c.id === l.contact_id)
-            if (contact) {
-              if (data.name) contact.name = data.name
-              if (data.phone) contact.phone = data.phone
-              if (data.email !== undefined) contact.email = data.email
-            }
+          if (name !== undefined || phone !== undefined || email !== undefined) {
+            const cp: Record<string, unknown> = {}
+            if (name) cp.name = name
+            if (phone) cp.phone = phone // normalize_contact_phone_trg canonicalises this server side
+            if (email !== undefined) cp.email = email
+            if (Object.keys(cp).length) ok(await supabase.from('contacts').update(cp).eq('id', l.contact_id))
           }
-          logActivity(db, id, 'note', 'Lead requirement details updated', user.id, now())
+          await logRemote(id, 'note', 'Lead requirement details updated', user.id)
+          await touch()
         }),
     }),
     /** Link or unlink the properties this buyer is being shown. */
     setProperties: useMutation({
       mutationFn: (property_ids: string[]) =>
-        write(() => {
+        write(async () => {
           const l = ownLead(user, id)
           const before = new Set(l.property_ids)
-          l.property_ids = [...new Set(property_ids)].filter(pid => db.properties.some(p => p.id === pid))
-          l.updated_at = now()
-          const added = l.property_ids.filter(pid => !before.has(pid))
-          const removed = [...before].filter(pid => !l.property_ids.includes(pid))
+          const next = [...new Set(property_ids)].filter(pid => db.properties.some(p => p.id === pid))
+          ok(await supabase.from('leads').update({ property_ids: next }).eq('id', id))
+          const added = next.filter(pid => !before.has(pid))
+          const removed = [...before].filter(pid => !next.includes(pid))
           const title = (pid: string) => db.properties.find(p => p.id === pid)?.title ?? pid
-          if (added.length) logActivity(db, id, 'note', `Property added: ${added.map(title).join(', ')}`, user.id, now())
-          if (removed.length) logActivity(db, id, 'note', `Property removed: ${removed.map(title).join(', ')}`, user.id, now())
+          if (added.length) await logRemote(id, 'note', `Property added: ${added.map(title).join(', ')}`, user.id)
+          if (removed.length) await logRemote(id, 'note', `Property removed: ${removed.map(title).join(', ')}`, user.id)
         }),
     }),
     /**
@@ -242,26 +242,26 @@ export function useLeadActions(id: string) {
      */
     followUp: useMutation({
       mutationFn: ({ title, kind, due_at, ends_at }: { title: string; kind: TaskKind; due_at: string; ends_at?: string | null }) =>
-        write(() => {
+        write(async () => {
           const l = ownLead(user, id)
           const task = {
             id: uid(), title, kind, lead_id: id, property_id: l.property_ids[0] ?? null, assigned_to: l.assigned_to ?? user.id,
-            due_at, ends_at: ends_at ?? null, status: 'pending' as const, created_by: user.id, created_at: now(),
+            due_at, ends_at: ends_at ?? null, status: 'pending' as const, created_by: user.id,
           }
-          const clash = findClash(db, task)
+          const clash = findClash(db, { ...task, id: task.id })
           if (clash) throw new Error(`That slot is already taken by "${clash.title}" at ${dateTime(clash.due_at)}. Pick another time.`)
-          db.tasks.push(task)
-          logActivity(db, id, 'follow_up', `${TASK_KIND_LABEL[kind]} scheduled: ${title} — ${dateTime(due_at)}`, user.id, now())
+          ok(await supabase.from('tasks').insert(task))
+          await logRemote(id, 'follow_up', `${TASK_KIND_LABEL[kind]} scheduled: ${title} — ${dateTime(due_at)}`, user.id)
         }),
     }),
     completeTask: useMutation({
       mutationFn: (taskId: string) =>
-        write(() => {
+        write(async () => {
           ownLead(user, id)
           const t = db.tasks.find(t => t.id === taskId && t.lead_id === id)
           if (!t) throw new Error('Task not found')
-          t.status = 'done'
-          logActivity(db, id, 'follow_up', `Completed: ${t.title}`, user.id, now())
+          ok(await supabase.from('tasks').update({ status: 'done' }).eq('id', taskId))
+          await logRemote(id, 'follow_up', `Completed: ${t.title}`, user.id)
         }),
     }),
   }

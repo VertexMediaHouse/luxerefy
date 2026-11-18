@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { db, respond, write } from '../../lib/db'
-import { canSeeLead, canSeeTask, findClash, isManager, logActivity, uid } from '../../lib/rules'
+import { db, ok, respond, write } from '../../lib/db'
+import { supabase } from '../../lib/supabase'
+import { canSeeLead, canSeeTask, findClash, isManager, uid } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { dateTime } from '../../lib/format'
 import type { Task } from '../../lib/types'
@@ -42,34 +43,38 @@ export function useReminders() {
   })
 }
 
+/** The timeline insert, server side. */
+const logRemote = (lead_id: string, body: string, actor_id: string) =>
+  supabase.from('lead_activities').insert({ lead_id, type: 'follow_up', body, meta: {}, actor_id }).then(ok)
+
 export function useSaveTask() {
   const user = useUser()
   return useMutation({
     mutationFn: ({ id, input }: { id?: string; input: TaskInput }) =>
-      write(() => {
+      write(async () => {
         if (!input.title.trim()) throw new Error('Give the task a title')
         if (input.ends_at && input.ends_at <= input.due_at) throw new Error('End time must be after the start')
         const lead = input.lead_id ? db.leads.find(l => l.id === input.lead_id) : null
         if (input.lead_id && (!lead || !canSeeLead(user, lead))) throw new Error('Lead not found')
         const existing = db.tasks.find(t => t.id === id)
         if (id && (!existing || !canSeeTask(user, existing))) throw new Error('Task not found')
-        const now = new Date().toISOString()
         const was = existing && { due_at: existing.due_at, ends_at: existing.ends_at }
         const task: Task = {
-          ...(existing ?? { id: uid(), status: 'pending', created_by: user.id, created_at: now }),
+          ...(existing ?? { id: uid(), status: 'pending', created_by: user.id, created_at: new Date().toISOString() }),
           ...input,
           assigned_to: isManager(user) ? input.assigned_to : user.id, // RLS with-check: agents only schedule themselves
         }
         const clash = findClash(db, task)
         if (clash) throw new Error(`That slot is already booked — "${clash.title}" at ${dateTime(clash.due_at)}. Pick another time.`)
         if (existing) {
-          Object.assign(existing, task)
+          const { id: _id, created_at, created_by, ...patch } = task
+          ok(await supabase.from('tasks').update(patch).eq('id', task.id))
           // A move is worth recording on the lead, so the timeline explains the new date.
           if (was && (was.due_at !== task.due_at || was.ends_at !== task.ends_at) && task.lead_id)
-            logActivity(db, task.lead_id, 'follow_up', `Rescheduled: ${task.title} — ${dateTime(was.due_at)} → ${dateTime(task.due_at)}`, user.id, now)
+            await logRemote(task.lead_id, `Rescheduled: ${task.title} — ${dateTime(was.due_at)} → ${dateTime(task.due_at)}`, user.id)
         } else {
-          db.tasks.push(task)
-          if (task.lead_id) logActivity(db, task.lead_id, 'follow_up', `Scheduled: ${task.title} — ${dateTime(task.due_at)}`, user.id, now)
+          ok(await supabase.from('tasks').insert(task))
+          if (task.lead_id) await logRemote(task.lead_id, `Scheduled: ${task.title} — ${dateTime(task.due_at)}`, user.id)
         }
         return task
       }),
@@ -80,14 +85,14 @@ export function useSetTaskStatus() {
   const user = useUser()
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: Task['status'] }) =>
-      write(() => {
+      write(async () => {
         const t = db.tasks.find(t => t.id === id)
         if (!t || !canSeeTask(user, t)) throw new Error('Task not found')
-        // Reopening a slot re-checks the exclusion constraint.
+        // Reopening a slot re-checks the overlap guard.
         const clash = status !== 'cancelled' && findClash(db, { ...t, status })
         if (clash) throw new Error(`Reopening this clashes with "${clash.title}". Move one of them first.`)
-        t.status = status
-        if (t.lead_id && status === 'done') logActivity(db, t.lead_id, 'follow_up', `Completed: ${t.title}`, user.id, new Date().toISOString())
+        ok(await supabase.from('tasks').update({ status }).eq('id', id))
+        if (t.lead_id && status === 'done') await logRemote(t.lead_id, `Completed: ${t.title}`, user.id)
       }),
   })
 }

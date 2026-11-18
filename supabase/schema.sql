@@ -161,12 +161,19 @@ create table if not exists documents (
 create table if not exists goals (
   id text primary key default gen_random_uuid()::text,
   period text not null check (period in ('weekly', 'monthly', 'yearly')),
-  metric text not null check (metric in ('leads', 'won', 'revenue', 'site_visits')),
+  metric text not null check (metric in ('potential_visits', 'site_visits', 'builder_meetings', 'revenue')),
   target numeric not null default 0,
+  manual numeric not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (period, metric)
 );
+
+-- ───────────────────── additive column migrations ─────────────────────
+-- "create table if not exists" above skips the whole statement on a project that already has the
+-- table, so a column added to this file later never reaches an existing database. Each column added
+-- after the first deployment gets an "add column if not exists" line here instead.
+alter table goals add column if not exists manual numeric not null default 0;
 
 -- Default board. The app needs at least one pipeline with these stage ids (see seed.ts / rules.ts entryOf).
 insert into pipelines (id, name, position) values ('pl-1', 'Sales pipeline', 0) on conflict do nothing;
@@ -179,6 +186,30 @@ insert into stages (id, pipeline_id, label, tone, position, kind) values
   ('pl-1-won', 'pl-1', 'Won', 'green', 5, 'won'),
   ('pl-1-lost', 'pl-1', 'Lost', 'red', 6, 'lost')
 on conflict do nothing;
+
+-- Default document folder structure
+insert into doc_folders (id, name, parent_id, color, icon) values
+  ('f-clients', 'Client Files', null, 'blue', 'folder'),
+  ('f-projects', 'Project Files', null, 'purple', 'building'),
+  ('f-design', 'Design Assets', null, 'rose', 'image'),
+  ('f-video', 'Video Assets', null, 'amber', 'video'),
+  ('f-documents', 'Documents', null, 'emerald', 'file-text'),
+  ('f-team', 'Team Resources', null, 'slate', 'users')
+on conflict do nothing;
+
+-- Performance indexes for foreign keys & frequent query filters
+create index if not exists tasks_assigned_to on tasks(assigned_to);
+create index if not exists tasks_lead on tasks(lead_id);
+create index if not exists tasks_due_status on tasks(due_at, status);
+create index if not exists tickets_assigned_to on tickets(assigned_to);
+create index if not exists tickets_lead on tickets(lead_id);
+create index if not exists leads_assigned_to on leads(assigned_to);
+create index if not exists leads_pipeline_status on leads(pipeline_id, status);
+create index if not exists properties_is_public on properties(is_public) where is_public = true;
+create index if not exists properties_locality on properties(locality);
+create index if not exists documents_lead on documents(lead_id);
+create index if not exists documents_property on documents(property_id);
+create index if not exists contacts_created_by on contacts(created_by);
 
 -- ───────────────────────── helpers ─────────────────────────
 
@@ -234,6 +265,28 @@ begin
   l := regexp_replace(d, '^(91|0)(\d{10})$', '\2');
   return case when l ~ '^[6-9]\d{9}$' then '+91' || l end;
 end $$;
+
+-- Auto-normalize phone on contact insert / update
+create or replace function normalize_contact_phone() returns trigger language plpgsql as $$
+begin
+  new.phone := coalesce(normalize_phone(new.phone), new.phone);
+  return new;
+end $$;
+drop trigger if exists normalize_contact_phone_trg on contacts;
+create trigger normalize_contact_phone_trg before insert or update of phone on contacts for each row execute function normalize_contact_phone();
+
+-- Automatic updated_at timestamp trigger
+create or replace function set_updated_at() returns trigger language plpgsql as $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists set_properties_updated_at on properties;
+create trigger set_properties_updated_at before update on properties for each row execute function set_updated_at();
+drop trigger if exists set_leads_updated_at on leads;
+create trigger set_leads_updated_at before update on leads for each row execute function set_updated_at();
+drop trigger if exists set_goals_updated_at on goals;
+create trigger set_goals_updated_at before update on goals for each row execute function set_updated_at();
 
 -- Port of captureLead in src/lib/rules.ts: the one entry point for every new enquiry
 -- (app form, sheet import, public sales form, property page, 99acres webhook).
@@ -388,3 +441,15 @@ create policy "crm docs upload" on storage.objects for insert to authenticated
 create policy "crm docs delete" on storage.objects for delete to authenticated
   using (bucket_id = 'documents' and exists (select 1 from public.documents d where d.storage_path = objects.name
          and (public.is_manager() or d.uploaded_by = auth.uid())));
+
+-- Public bucket for property images and public marketing media
+insert into storage.buckets (id, name, public) values ('property-images', 'property-images', true) on conflict do nothing;
+drop policy if exists "crm property images read" on storage.objects;
+drop policy if exists "crm property images upload" on storage.objects;
+drop policy if exists "crm property images delete" on storage.objects;
+create policy "crm property images read" on storage.objects for select
+  using (bucket_id = 'property-images');
+create policy "crm property images upload" on storage.objects for insert to authenticated
+  with check (bucket_id = 'property-images' and public.is_staff());
+create policy "crm property images delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'property-images' and public.is_manager());

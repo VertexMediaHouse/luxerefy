@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { useParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
 import { BedDouble, CheckCircle2, ChevronLeft, ChevronRight, Info, MapPin, Ruler } from 'lucide-react'
 import { Button, Card, ErrorText, Field, inputCls, Loading } from '../../components/ui'
 import { Brand } from '../../components/Layout'
@@ -154,12 +154,14 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function EnquiryForm({ p }: { p: Property }) {
+  const [params] = useSearchParams()
+  const cp = params.get('cp')?.trim() || ''
   const enquire = useSubmitEnquiry(p)
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const s = (k: string) => String(f.get(k) ?? '').trim()
-    enquire.mutate({ name: s('name'), phone: s('phone'), email: s('email'), message: s('message') })
+    enquire.mutate({ name: s('name'), phone: s('phone'), email: s('email'), message: s('message'), cp })
   }
   if (enquire.isSuccess) return (
     <div className="py-6 text-center">
@@ -173,6 +175,7 @@ function EnquiryForm({ p }: { p: Property }) {
       <div>
         <h2 className="text-lg font-bold text-slate-900">Enquire now</h2>
         <p className="text-sm text-slate-500">Get pricing, floor plans or book a private visit.</p>
+        {cp && <p className="mt-1 text-xs font-medium text-slate-400">Presented by {cp}</p>}
       </div>
       <Field label="Name"><input name="name" required autoComplete="name" className={inputCls} /></Field>
       <Field label="Mobile"><input name="phone" required inputMode="tel" autoComplete="tel" className={inputCls} placeholder="+91" /></Field>

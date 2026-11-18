@@ -4,4 +4,5 @@ dist
 .env.local
 .env
 .env.*
-!.env.examplepublic/api/webhooks/config.php
+!.env.example
+public/api/webhooks/config.php

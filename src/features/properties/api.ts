@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { captureRemote, db, respond, write } from '../../lib/db'
-import { isManager, uid } from '../../lib/rules'
+import { captureRemote, db, ok, respond, write } from '../../lib/db'
+import { supabase } from '../../lib/supabase'
+import { isManager } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { slugify } from '../../lib/format'
 import type { Property } from '../../lib/types'
@@ -19,20 +20,21 @@ export const useProperty = (id: string | undefined) =>
 export const usePublicProperty = (slug: string) =>
   useQuery({ queryKey: ['public-property', slug], queryFn: () => respond(db.properties.find(p => p.slug === slug && p.is_public) ?? null) })
 
+/** slug is unique, so a repeated title gets -2, -3 ... appended. */
+function nextSlug(title: string, locality: string) {
+  const base = slugify(`${title} ${locality || ''}`) || 'property'
+  let slug = base
+  for (let i = 2; db.properties.some(p => p.slug === slug); i++) slug = `${base}-${i}`
+  return slug
+}
+
 export function useSaveProperty() {
   return useMutation({
     mutationFn: ({ id, input }: { id?: string; input: PropertyInput }) =>
-      write(() => {
-        const now = new Date().toISOString()
+      write(async () => {
         if (!input.title.trim()) throw new Error('Title is required')
-        const existing = db.properties.find(p => p.id === id)
-        if (existing) return Object.assign(existing, input, { updated_at: now })
-        const base = slugify(`${input.title} ${input.locality}`) || 'property'
-        let slug = base
-        for (let i = 2; db.properties.some(p => p.slug === slug); i++) slug = `${base}-${i}`
-        const p: Property = { ...input, id: uid(), slug, created_at: now, updated_at: now }
-        db.properties.push(p)
-        return p
+        if (id) return ok(await supabase.from('properties').update(input).eq('id', id).select().single()) as Property
+        return ok(await supabase.from('properties').insert({ ...input, slug: nextSlug(input.title, input.locality) }).select().single()) as Property
       }),
   })
 }
@@ -40,30 +42,23 @@ export function useSaveProperty() {
 export function useImportProperties() {
   return useMutation({
     mutationFn: (inputs: PropertyInput[]) =>
-      write(() => {
-        const now = new Date().toISOString()
-        let created = 0
+      write(async () => {
+        const taken = new Set(db.properties.map(p => p.slug))
+        const rows: (PropertyInput & { slug: string })[] = []
         const failed: { row: number; error: string }[] = []
         inputs.forEach((input, i) => {
-          try {
-            if (!input.title?.trim()) throw new Error('Title is required')
-            const base = slugify(`${input.title} ${input.locality || ''}`) || 'property'
-            let slug = base
-            for (let k = 2; db.properties.some(p => p.slug === slug); k++) slug = `${base}-${k}`
-            const p: Property = {
-              ...input,
-              id: uid(),
-              slug,
-              created_at: now,
-              updated_at: now,
-            }
-            db.properties.push(p)
-            created++
-          } catch (e) {
-            failed.push({ row: i + 2, error: (e as Error).message })
-          }
+          if (!input.title?.trim()) return failed.push({ row: i + 2, error: 'Title is required' })
+          // Rows in one file can collide with each other as well as with stored slugs.
+          const base = slugify(`${input.title} ${input.locality || ''}`) || 'property'
+          let slug = base
+          for (let k = 2; taken.has(slug); k++) slug = `${base}-${k}`
+          taken.add(slug)
+          rows.push({ ...input, slug })
         })
-        return { created, failed }
+        // One insert for the file: a row that violates a constraint fails the whole import rather
+        // than leaving half of it in, which is the behaviour you want for a re-runnable upload.
+        if (rows.length) ok(await supabase.from('properties').insert(rows))
+        return { created: rows.length, failed }
       }),
   })
 }
@@ -72,22 +67,32 @@ export function useDeleteProperty() {
   const user = useUser()
   return useMutation({
     mutationFn: (id: string) =>
-      write(() => {
+      write(async () => {
         if (!isManager(user)) throw new Error('Only owners and managers can delete properties.')
-        db.properties = db.properties.filter(p => p.id !== id)
-        // FK: on delete, drop it from every lead's interest list but keep the lead's history.
-        for (const l of db.leads) l.property_ids = l.property_ids.filter(pid => pid !== id)
+        ok(await supabase.from('properties').delete().eq('id', id))
+        // property_ids is a plain text[], so no FK drops it: clear it per lead, keeping the history.
+        for (const l of db.leads.filter(l => l.property_ids.includes(id)))
+          ok(await supabase.from('leads').update({ property_ids: l.property_ids.filter(pid => pid !== id) }).eq('id', l.id))
       }),
   })
 }
 
-/** "Enquire Now" on the public page: anon-callable capture_leads RPC. */
+/**
+ * "Enquire Now" on the public page: anon-callable capture_leads RPC.
+ * `cp` comes from the ?cp= tag on a channel partner's copy of the link, so the lead
+ * is filed as a referral and credited to that partner.
+ */
 export function useSubmitEnquiry(property: Property) {
   return useMutation({
-    mutationFn: async (f: { name: string; phone: string; email: string; message: string }) => {
+    mutationFn: async (f: { name: string; phone: string; email: string; message: string; cp?: string }) => {
       if (!f.name.trim()) throw new Error('Please enter your name')
+      const { cp, ...lead } = f
+      const partner = cp?.trim() || ''
       const [r] = await captureRemote([{
-        ...f, source: 'property_page', property_ids: [property.id],
+        ...lead,
+        source: partner ? 'referral' : 'property_page',
+        referral_detail: partner || null,
+        property_ids: [property.id],
         property_interest: `${property.config}, ${property.locality}`, city: property.city,
       }])
       if (r.error !== undefined) throw new Error(r.error)
