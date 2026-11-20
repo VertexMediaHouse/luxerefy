@@ -14,16 +14,33 @@ export const db: Tables = {
 const TABLES = Object.keys(db) as (keyof Tables)[]
 
 /** Pull every readable row into the mirror. Throws on a real failure (bad key, project down). */
+/** Per-table request counter: a slow, older read must not overwrite a newer one that landed first. */
+const seq: Partial<Record<keyof Tables, number>> = {}
 export async function refresh(tables: readonly (keyof Tables)[] = TABLES) {
+  const mine = tables.map(t => (seq[t] = (seq[t] ?? 0) + 1))
   const results = await Promise.all(tables.map(selectAll))
-  results.forEach((rows, i) => { (db[tables[i]] as unknown[]) = rows })
+  results.forEach((rows, i) => { if (seq[tables[i]] === mine[i]) (db[tables[i]] as unknown[]) = rows })
 }
 
 /** Tables named in supabase.from() since the last take(), so a write re-pulls only what it touched. */
 const touched = new Set<keyof Tables>()
 const from = supabase.from.bind(supabase)
 supabase.from = ((t: keyof Tables) => (touched.add(t), from(t))) as typeof supabase.from
-const take = () => { const t = [...touched].filter(x => TABLES.includes(x)); touched.clear(); return t }
+/** FK cascades and set-nulls in schema.sql: a write to the key changes these tables too. */
+const DEPENDS: Partial<Record<keyof Tables, (keyof Tables)[]>> = {
+  pipelines: ['stages', 'leads'],
+  contacts: ['leads', 'lead_activities', 'tasks', 'tickets', 'documents'],
+  leads: ['lead_activities', 'tasks', 'tickets', 'documents'],
+  doc_folders: ['documents'],
+  profiles: TABLES,
+}
+// ponytail: one global set, so two overlapping writes can share it; the later refresh still catches up.
+const take = () => {
+  const t = new Set([...touched].filter(x => TABLES.includes(x)))
+  for (const x of [...t]) for (const d of DEPENDS[x] ?? []) t.add(d)
+  touched.clear()
+  return [...t]
+}
 
 /** PostgREST caps a response at 1000 rows, so read in pages. Without this, backups silently drop rows. */
 const PAGE = 1000

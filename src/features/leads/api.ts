@@ -1,25 +1,59 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { captureRemote, db, ok, respond, write } from '../../lib/db'
+import { captureRemote, db, ok, refresh, respond, write, writeHooks } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
 import { canSeeLead, findClash, isLost, isOpen, isWon, uid, type CaptureInput } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { stage, stageLabel } from '../../lib/stages'
 import { dateTime } from '../../lib/format'
 import { TASK_KIND_LABEL } from '../../lib/labels'
-import type { ActivityType, Lead, LeadStatus, LeadType, Profile, Property, TaskKind } from '../../lib/types'
+import type { ActivityType, Lead, LeadStatus, LeadType, Profile, Property, Task, TaskKind } from '../../lib/types'
 
 const byNewest = (a: { created_at: string }, b: { created_at: string }) => b.created_at.localeCompare(a.created_at)
 
+/**
+ * Lookups for join(), built in one pass per table. Scanning every activity and task per lead was
+ * O(leads x rows) and froze the board for over a second. Rebuilt only when refresh() swaps a table.
+ */
+let idx: ReturnType<typeof buildIndex> | null = null
+function buildIndex() {
+  const src = [db.contacts, db.properties, db.lead_activities, db.documents, db.tasks] as const
+  const count = (rows: { lead_id: string | null }[]) => {
+    const m = new Map<string, number>()
+    for (const r of rows) if (r.lead_id) m.set(r.lead_id, (m.get(r.lead_id) ?? 0) + 1)
+    return m
+  }
+  const nextTask = new Map<string, Task>()
+  for (const t of db.tasks) {
+    if (!t.lead_id || t.status !== 'pending') continue
+    const cur = nextTask.get(t.lead_id)
+    if (!cur || t.due_at < cur.due_at) nextTask.set(t.lead_id, t)
+  }
+  return {
+    src,
+    contacts: new Map(db.contacts.map(c => [c.id, c])),
+    properties: new Map(db.properties.map(p => [p.id, p])),
+    activities: count(db.lead_activities),
+    docs: count(db.documents),
+    nextTask,
+  }
+}
+function index() {
+  const src = [db.contacts, db.properties, db.lead_activities, db.documents, db.tasks]
+  if (!idx || idx.src.some((a, i) => a !== src[i])) idx = buildIndex()
+  return idx
+}
+
 function join(l: Lead) {
+  const i = index()
   return {
     ...l,
-    contact: db.contacts.find(c => c.id === l.contact_id)!,
+    contact: i.contacts.get(l.contact_id)!,
     // A buyer is usually shown several places, so every linked property travels with the lead.
-    properties: l.property_ids.map(id => db.properties.find(p => p.id === id)).filter((p): p is Property => !!p),
-    activity_count: db.lead_activities.filter(a => a.lead_id === l.id).length,
-    doc_count: db.documents.filter(d => d.lead_id === l.id).length,
+    properties: l.property_ids.map(id => i.properties.get(id)).filter((p): p is Property => !!p),
+    activity_count: i.activities.get(l.id) ?? 0,
+    doc_count: i.docs.get(l.id) ?? 0,
     // The board card shows the next commitment, which is the thing you actually act on.
-    next_task: db.tasks.filter(t => t.lead_id === l.id && t.status === 'pending').sort((a, b) => a.due_at.localeCompare(b.due_at))[0] ?? null,
+    next_task: i.nextTask.get(l.id) ?? null,
   }
 }
 export type LeadRow = ReturnType<typeof join>
@@ -99,11 +133,36 @@ async function applyStatus(user: Profile, id: string, status: LeadStatus, reason
     ok(await supabase.from('contacts').update({ kind: 'client' }).eq('id', contact.id))
 }
 
+/**
+ * Stage change, optimistic: the mirror moves the lead at once, the save runs behind it, and a
+ * failed save puts the lead back. Waiting for the round trip made the board feel stuck.
+ */
+async function moveLead(user: Profile, id: string, status: LeadStatus, reason?: string) {
+  const l = ownLead(user, id)
+  const before = { status: l.status, pipeline_id: l.pipeline_id, lost_reason: l.lost_reason, updated_at: l.updated_at }
+  const save = applyStatus(user, id, status, reason)
+  save.catch(() => {}) // handled below; stops an unhandled-rejection warning before the await
+  Object.assign(l, {
+    status, pipeline_id: stage(status)?.pipeline_id ?? l.pipeline_id,
+    lost_reason: isLost({ status }) ? reason ?? null : null, updated_at: new Date().toISOString(),
+  })
+  writeHooks.after()
+  try {
+    await save
+  } catch (e) {
+    Object.assign(l, before)
+    writeHooks.after()
+    throw e
+  }
+  // Timeline entry and the client flag on a win come from the server; pull them without blocking.
+  void refresh(['leads', 'lead_activities', 'contacts']).then(writeHooks.after, () => {})
+}
+
 /** Board drag-and-drop. Separate from useLeadActions because the card is not the open lead. */
 export function useMoveLead() {
   const user = useUser()
   return useMutation({
-    mutationFn: ({ id, status, reason }: { id: string; status: LeadStatus; reason?: string }) => write(() => applyStatus(user, id, status, reason)),
+    mutationFn: ({ id, status, reason }: { id: string; status: LeadStatus; reason?: string }) => moveLead(user, id, status, reason),
   })
 }
 
@@ -168,8 +227,7 @@ export function useLeadActions(id: string) {
   const touch = async () => ok(await supabase.from('leads').update({ updated_at: new Date().toISOString() }).eq('id', id))
   return {
     setStatus: useMutation({
-      mutationFn: ({ status, reason }: { status: LeadStatus; reason?: string }) =>
-        write(() => applyStatus(user, id, status, reason)),
+      mutationFn: ({ status, reason }: { status: LeadStatus; reason?: string }) => moveLead(user, id, status, reason),
     }),
     log: useMutation({
       mutationFn: ({ type, body }: { type: 'call' | 'note' | 'text'; body: string }) =>

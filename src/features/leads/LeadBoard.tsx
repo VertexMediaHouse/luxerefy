@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { memo, useState, type DragEvent } from 'react'
 import { Link } from 'react-router'
 import { useBase } from '../../lib/session'
 import { Building2, CalendarCheck, Clock, FileText, MessageSquare, Phone, Plus, Trash2, Users } from 'lucide-react'
@@ -39,7 +39,15 @@ function TaskIcon({ kind }: { kind: string }) {
   return <Clock className="size-3 shrink-0" />
 }
 
-function LeadCard({ l, dragging, onDrag, base }: { l: LeadRow; dragging: boolean; onDrag: (id: string | null) => void; base: string }) {
+/** Cards re-render only when their own lead changes: redrawing every card on each move froze the board. */
+const sameArr = (a: unknown, b: unknown) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i])
+function sameCard(a: { l: LeadRow; dragging: boolean; base: string }, b: { l: LeadRow; dragging: boolean; base: string }) {
+  if (a.dragging !== b.dragging || a.base !== b.base) return false
+  const x = a.l as Record<string, unknown>, y = b.l as Record<string, unknown>
+  return Object.keys(y).every(k => x[k] === y[k] || sameArr(x[k], y[k]))
+}
+
+const LeadCard = memo(function LeadCard({ l, dragging, onDrag, base }: { l: LeadRow; dragging: boolean; onDrag: (id: string | null) => void; base: string }) {
   const task = l.next_task
   const overdue = !!task && Date.parse(task.due_at) < Date.now()
   const assignee = l.assigned_to ? db.profiles.find(p => p.id === l.assigned_to) : null
@@ -185,7 +193,7 @@ function LeadCard({ l, dragging, onDrag, base }: { l: LeadRow; dragging: boolean
       </div>
     </Link>
   )
-}
+}, sameCard)
 
 /**
  * Kanban over one pipeline's stages. `limit` caps cards per column (dashboard preview).
