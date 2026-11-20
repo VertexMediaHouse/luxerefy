@@ -6,14 +6,20 @@ import { LEAD_TYPES, LEAD_TYPE_LABEL, SOURCE_LABEL } from '../../lib/labels'
 import type { Lead, LeadSource, LeadType } from '../../lib/types'
 import { useProperties } from '../properties/api'
 import { useCreateLead } from './api'
+import { useBase, useUser } from '../../lib/session'
+import { isManager } from '../../lib/rules'
 
-type ModalProps = { open: boolean; onClose: () => void }
+type ModalProps = { open: boolean; onClose: () => void; assignTo?: string; base?: string }
 
-export function NewLeadModal({ open, onClose }: ModalProps) {
-  return <Modal open={open} onClose={onClose} title="New lead" wide><NewLeadForm onClose={onClose} /></Modal>
+export function NewLeadModal({ open, onClose, assignTo, base }: ModalProps) {
+  const user = useUser()
+  const root = useBase()
+  assignTo ??= isManager(user) ? undefined : user.id
+  base ??= `${root}/leads`
+  return <Modal open={open} onClose={onClose} title="New lead" wide><NewLeadForm onClose={onClose} assignTo={assignTo} base={base} /></Modal>
 }
 
-function NewLeadForm({ onClose }: { onClose: () => void }) {
+function NewLeadForm({ onClose, assignTo, base }: { onClose: () => void; assignTo?: string; base: string }) {
   const nav = useNavigate()
   const { data: properties = [] } = useProperties()
   const create = useCreateLead()
@@ -33,6 +39,7 @@ function NewLeadForm({ onClose }: { onClose: () => void }) {
     create.mutate(
       {
         name: s('name'), phone: s('phone'), email: s('email') || null, source,
+        assigned_to: assignTo ?? null,
         property_ids: picked,
         property_interest: s('property_interest') || (first ? `${first.config}, ${first.locality}` : null),
         locality: s('locality') || (first ? first.locality : null),
@@ -41,7 +48,7 @@ function NewLeadForm({ onClose }: { onClose: () => void }) {
         budget_min: cr('budget_min'), budget_max: cr('budget_max'), city: s('city') || null,
         referral_detail: s('referral_detail') || null, notes: s('notes') || null, message: s('notes') || null,
       },
-      { onSuccess: ({ lead, created }) => (created ? (onClose(), nav(`/leads/${lead.id}`)) : setDup(lead)) },
+      { onSuccess: ({ lead, created }) => (created ? (onClose(), nav(`${base}/${lead.id}`)) : setDup(lead)) },
     )
   }
 
@@ -54,7 +61,7 @@ function NewLeadForm({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Close</Button>
-          <Link to={`/leads/${dup.id}`} onClick={onClose} className={buttonCls()}>Open lead</Link>
+          <Link to={`${base}/${dup.id}`} onClick={onClose} className={buttonCls()}>Open lead</Link>
         </div>
       </div>
     )

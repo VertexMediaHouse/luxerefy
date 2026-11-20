@@ -9,11 +9,13 @@ const WEEK = 7 * 86400e3
 /** Two months of weekly snapshots. Older ones are pruned as new ones land. */
 const KEEP = 8
 
-/** Every table a restore has to put back. A file missing any of them is rejected. */
-export const TABLES = [
+/** Every table a restore has to put back. A JSON file missing any of them is rejected. */
+const REQUIRED = [
   'profiles', 'contacts', 'properties', 'pipelines', 'stages',
   'leads', 'lead_activities', 'tasks', 'tickets', 'documents',
 ] as const
+/** Exported and restored when present. Older backups predate these, so they are optional. */
+export const TABLES = [...REQUIRED, 'doc_folders', 'goals'] as const
 
 export interface BackupFile { version: number; taken_at: string; tables: Tables }
 
@@ -29,43 +31,45 @@ export const takenAt = (key: string) => key.slice(PREFIX.length)
 /** Newest first. */
 export const listBackups = () => listFiles(PREFIX).then(keys => keys.sort().reverse())
 
-export async function syncToGoogleSheet() {
-  const payload = {
-    version: 3,
-    taken_at: new Date().toISOString(),
-    tables: db,
-  }
-
-  // Google Apps Script requires text/plain or no-cors with body string to avoid preflight issues
-  const res = await fetch(GOOGLE_SCRIPT_WEBAPP_URL, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-  })
-
-  if (!res.ok) {
-    throw new Error(`Google Sheets backup returned status ${res.status}`)
-  }
-
-  const data = await res.json().catch(() => null)
-  if (data && data.status === 'error') {
-    throw new Error(data.message || 'Google Sheets sync failed')
-  }
-
-  localStorage.setItem('luxerefy_last_sheet_backup', new Date().toISOString())
-  return data
+/** What the Apps Script (public/api/backup/backup_script.gs) reports about itself. */
+export interface SheetStatus {
+  version: number
+  configured: boolean
+  scheduled: boolean
+  lastSyncAt: string | null
+  counts: [string, number | string][]
 }
 
-export function getLastSheetBackup(): string | null {
-  return localStorage.getItem('luxerefy_last_sheet_backup')
+const OUTDATED = 'The Google Apps Script is out of date. Paste public/api/backup/backup_script.gs into it and redeploy (steps are at the top of that file).'
+
+async function callScript(init?: RequestInit) {
+  const res = await fetch(GOOGLE_SCRIPT_WEBAPP_URL, init).catch(() => { throw new Error('Could not reach the Google Apps Script. Check the web app URL and your connection.') })
+  if (!res.ok) throw new Error(`Google Apps Script returned status ${res.status}`)
+  const data = await res.json().catch(() => { throw new Error(OUTDATED) })
+  if (data?.status === 'error') throw new Error(data.message || 'Google Sheets sync failed')
+  return data as SheetStatus
+}
+
+/** Live status from the script, shared by every device (not this browser's memory). */
+export async function getSheetStatus() {
+  const s = await callScript()
+  // The v3 script had no doGet. Never POST to it: it would wipe every tab with an empty payload.
+  if (!(s.version >= 4)) throw new Error(OUTDATED)
+  return s
+}
+
+/** Ask the script to pull every table from Supabase now. No records leave the browser. */
+export async function syncToGoogleSheet() {
+  const s = await getSheetStatus()
+  if (!s.configured) throw new Error('The Apps Script has no Supabase credentials yet. Add SUPABASE_URL and SUPABASE_SERVICE_KEY under its Script Properties.')
+  // text/plain avoids a CORS preflight, which Apps Script cannot answer.
+  return callScript({ method: 'POST', body: '{}', headers: { 'Content-Type': 'text/plain;charset=utf-8' } })
 }
 
 export async function takeBackup(at = new Date().toISOString()) {
   const body: BackupFile = { version: 3, taken_at: at, tables: db }
   await putFile(PREFIX + at, new Blob([JSON.stringify(body)], { type: 'application/json' }))
   for (const old of (await listBackups()).slice(KEEP)) await deleteFile(old)
-  // Background trigger Google Sheet backup sync without blocking
-  void syncToGoogleSheet().catch(err => console.warn('Background Google Sheet sync error:', err))
   return at
 }
 
@@ -252,7 +256,7 @@ export async function restoreBackup(file: File, userId: string) {
   }
   const tables = (parsed as Partial<BackupFile> | null)?.tables as Record<string, unknown> | undefined
   if (!tables || typeof tables !== 'object') throw new Error('That file is not a Luxerefy backup.')
-  const missing = TABLES.filter(t => !Array.isArray(tables[t]))
+  const missing = REQUIRED.filter(t => !Array.isArray(tables[t]))
   if (missing.length) throw new Error(`This backup is missing ${missing.join(', ')}, so it cannot be restored.`)
   if (!(tables.pipelines as unknown[]).length) throw new Error('This backup has no pipelines in it.')
 

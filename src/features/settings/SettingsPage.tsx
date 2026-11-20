@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronRight, DatabaseBackup, Eye, Settings, UserCog } from 'lucide-react'
+import { Check, ChevronRight, DatabaseBackup, Eye, Settings } from 'lucide-react'
 import { Button, Card, CardHeader, ErrorText, Field, inputCls, PageHeader } from '../../components/ui'
 import { useUser } from '../../lib/session'
 import { toggleEyeSafe, useEyeSafe } from '../../lib/eyeSafe'
@@ -9,7 +9,6 @@ import { db, write } from '../../lib/db'
 
 const LINKS = [
   { to: '/backup', icon: DatabaseBackup, label: 'Backups', hint: 'Google Sheets sync, snapshots, download and restore' },
-  { to: '/team', icon: UserCog, label: 'Team and roles', hint: 'Manage teams and module access' },
 ]
 
 export function SettingsPage() {

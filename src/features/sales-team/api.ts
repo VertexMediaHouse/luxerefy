@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { db, refresh } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
+import { isOpen } from '../../lib/rules'
+import { isOverdue } from '../tasks/api'
 
 export interface SalesUserData {
   id: string
@@ -86,6 +88,18 @@ export function useUpdateSalesUser() {
 
 export function useDeleteSalesUser() {
   return useAdminMutation((id: string) => adminFetch(`/${id}`, { method: 'DELETE' }))
+}
+
+/** Follow-up discipline for one rep, read live from the mirror (callers subscribe via useLeads/useTasks). */
+export function repHealth(id: string) {
+  const open = db.leads.filter(l => l.assigned_to === id && isOpen(l))
+  const pending = db.tasks.filter(t => t.assigned_to === id && t.status === 'pending')
+  const booked = new Set(pending.map(t => t.lead_id))
+  return {
+    open: open.length,
+    overdue: pending.filter(isOverdue).length,
+    noFollowUp: open.filter(l => !booked.has(l.id)).length,
+  }
 }
 
 export function useSalesUserDetail(id: string) {

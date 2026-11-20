@@ -3,14 +3,13 @@ import {
   AlertCircle,
   CalendarClock,
   CalendarDays,
+  BellOff,
   Check,
   CheckCircle2,
   Clock,
   Flame,
   Phone,
-  Sparkles,
   Target,
-  TrendingUp,
   Users,
 } from 'lucide-react'
 import {
@@ -23,15 +22,19 @@ import { useUser } from '../../lib/session'
 import { db } from '../../lib/db'
 import { dateTime, prettyPhone, relative } from '../../lib/format'
 import { stagesOf } from '../../lib/stages'
-import { isOverdue, useSetTaskStatus } from '../tasks/api'
+import { isOpen } from '../../lib/rules'
+import { TASK_KIND_LABEL } from '../../lib/labels'
+import { useLeads } from '../leads/api'
+import { isOverdue, useSetTaskStatus, useTasks } from '../tasks/api'
 
 export function SalesDashboardPage() {
   const user = useUser()
   const nav = useNavigate()
   const setTaskStatus = useSetTaskStatus()
+  useLeads()
+  useTasks()
   const today = new Date()
   const todayStr = today.toISOString().slice(0, 10)
-  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
 
   // Strict scoping: only own data
   const myLeads = db.leads.filter(l => l.assigned_to === user.id)
@@ -39,14 +42,14 @@ export function SalesDashboardPage() {
 
   // KPI Calculations
   const assignedLeadsCount = myLeads.length
+  const openLeads = myLeads.filter(isOpen).length
   const newLeadsToday = myLeads.filter(l => l.created_at.slice(0, 10) === todayStr).length
   const followUpsDueToday = myTasks.filter(
     t => t.status === 'pending' && t.due_at.slice(0, 10) === todayStr,
   ).length
-  const overdueTasks = myTasks.filter(t => t.status === 'pending' && Date.parse(t.due_at) < Date.now())
-  const tasksCompletedThisWeek = myTasks.filter(
-    t => t.status === 'done' && t.due_at >= oneWeekAgo,
-  ).length
+  const overdueTasks = myTasks.filter(isOverdue)
+  const pendingLeadIds = new Set(myTasks.filter(t => t.status === 'pending').map(t => t.lead_id))
+  const noFollowUp = myLeads.filter(l => isOpen(l) && !pendingLeadIds.has(l.id)).length
   const wonDeals = myLeads.filter(l => l.status.endsWith('-won')).length
   const conversionRate = assignedLeadsCount
     ? Math.round((wonDeals / assignedLeadsCount) * 100)
@@ -100,65 +103,28 @@ export function SalesDashboardPage() {
         })}`}
       />
 
-      {/* 7 KPI Cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-        <Card className="p-3.5">
-          <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
-            <Users className="size-3.5 text-blue-600" /> Assigned Leads
-          </div>
-          <div className="mt-2 text-2xl font-bold text-slate-900">{assignedLeadsCount}</div>
-          <p className="mt-1 text-[11px] text-slate-400">Total in your queue</p>
-        </Card>
-
-        <Card className="p-3.5">
-          <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
-            <Sparkles className="size-3.5 text-blue-500" /> New Today
-          </div>
-          <div className="mt-2 text-2xl font-bold text-blue-600">{newLeadsToday}</div>
-          <p className="mt-1 text-[11px] text-slate-400">Assigned today</p>
-        </Card>
-
-        <Card className="p-3.5">
-          <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
-            <CalendarClock className="size-3.5 text-amber-600" /> Due Today
-          </div>
-          <div className="mt-2 text-2xl font-bold text-slate-900">{followUpsDueToday}</div>
-          <p className="mt-1 text-[11px] text-slate-400">Follow-ups due</p>
-        </Card>
-
-        <Card className={`p-3.5 ${overdueTasks.length > 0 ? 'border-red-200 bg-red-50/40' : ''}`}>
-          <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
-            <AlertCircle className={`size-3.5 ${overdueTasks.length > 0 ? 'text-red-600' : 'text-slate-400'}`} /> Overdue
-          </div>
-          <div className={`mt-2 text-2xl font-bold ${overdueTasks.length > 0 ? 'text-red-600' : 'text-slate-900'}`}>
-            {overdueTasks.length}
-          </div>
-          <p className="mt-1 text-[11px] text-slate-400">Requires action</p>
-        </Card>
-
-        <Card className="p-3.5">
-          <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
-            <CheckCircle2 className="size-3.5 text-emerald-600" /> Done This Week
-          </div>
-          <div className="mt-2 text-2xl font-bold text-emerald-600">{tasksCompletedThisWeek}</div>
-          <p className="mt-1 text-[11px] text-slate-400">Tasks completed</p>
-        </Card>
-
-        <Card className="p-3.5">
-          <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
-            <Target className="size-3.5 text-emerald-600" /> Won Deals
-          </div>
-          <div className="mt-2 text-2xl font-bold text-slate-900">{wonDeals}</div>
-          <p className="mt-1 text-[11px] text-slate-400">Successfully closed</p>
-        </Card>
-
-        <Card className="p-3.5 col-span-2 sm:col-span-1">
-          <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-semibold uppercase tracking-wider">
-            <TrendingUp className="size-3.5 text-blue-600" /> Conversion
-          </div>
-          <div className="mt-2 text-2xl font-bold text-slate-900">{conversionRate}%</div>
-          <p className="mt-1 text-[11px] text-emerald-600 font-medium">Won / Assigned</p>
-        </Card>
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {[
+          { to: '/sales/leads', icon: Users, label: 'Open leads', value: openLeads, note: newLeadsToday ? `+${newLeadsToday} new today` : `${assignedLeadsCount} assigned in total`, tone: 'text-blue-600' },
+          { to: '/sales/tasks?filter=today', icon: CalendarClock, label: 'Due today', value: followUpsDueToday, note: 'Follow-ups and visits', tone: 'text-amber-600' },
+          { to: '/sales/tasks?filter=overdue', icon: AlertCircle, label: 'Overdue', value: overdueTasks.length, note: overdueTasks.length ? 'Clear these first' : 'Nothing late', tone: 'text-red-600', alert: overdueTasks.length > 0 },
+          { to: '/sales/leads?followup=none', icon: BellOff, label: 'No follow-up', value: noFollowUp, note: 'Open leads with no next step', tone: 'text-amber-600', warn: noFollowUp > 0 },
+          { to: `/sales/leads?status=${stages.find(s => s.kind === 'won')?.id ?? ''}`, icon: Target, label: 'Won', value: wonDeals, note: `${conversionRate}% conversion`, tone: 'text-emerald-600' },
+        ].map(k => (
+          <Link
+            key={k.label}
+            to={k.to}
+            className={`group rounded-xl border bg-white p-4 shadow-soft transition-colors hover:border-slate-300 ${
+              k.alert ? 'border-red-200 bg-red-50/40' : k.warn ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200/80'
+            } ${k.label === 'Won' ? 'col-span-2 sm:col-span-1' : ''}`}
+          >
+            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+              <k.icon className={`size-3.5 ${k.tone}`} /> {k.label}
+            </div>
+            <div className={`mt-2 text-2xl font-bold tabular-nums ${k.alert ? 'text-red-600' : 'text-slate-900'}`}>{k.value}</div>
+            <p className="mt-0.5 text-xs text-slate-400 group-hover:text-slate-500">{k.note}</p>
+          </Link>
+        ))}
       </div>
 
       {/* Pipeline Stage Breakdown */}
@@ -271,8 +237,8 @@ export function SalesDashboardPage() {
           <Card>
             <CardHeader
               icon={Clock}
-              title="Upcoming This Week"
-              subtitle="Scheduled visits and meetings"
+              title="Coming up"
+              subtitle="Your next scheduled tasks"
               action={
                 <Link to="/sales/calendar" className="text-xs font-semibold text-blue-600 hover:underline">
                   Calendar →
@@ -284,15 +250,19 @@ export function SalesDashboardPage() {
                 <div className="p-4 text-center text-xs text-slate-400">No upcoming tasks scheduled.</div>
               ) : (
                 upcomingTasks.map(t => (
-                  <div key={t.id} className="flex items-center justify-between p-3 text-xs">
-                    <div>
-                      <div className="font-semibold text-slate-800">{t.title}</div>
+                  <Link
+                    key={t.id}
+                    to={t.lead_id ? `/sales/leads/${t.lead_id}` : '/sales/tasks'}
+                    className="flex items-center justify-between gap-3 px-4 py-3 text-xs hover:bg-slate-50"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-slate-800">{t.title}</div>
                       <div className="text-slate-400">{dateTime(t.due_at)}</div>
                     </div>
-                    <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-600 uppercase">
-                      {t.kind}
+                    <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                      {TASK_KIND_LABEL[t.kind]}
                     </span>
-                  </div>
+                  </Link>
                 ))
               )}
             </div>

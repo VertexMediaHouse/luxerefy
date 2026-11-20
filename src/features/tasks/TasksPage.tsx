@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { AlertTriangle, CalendarClock, Check, CheckCircle2, CheckSquare, Clock, Plus, Settings2, Trash2 } from 'lucide-react'
-import { Badge, Button, Card, CardHeader, Empty, Field, inputCls, Loading, Modal, PageHeader, SearchBox } from '../../components/ui'
+import { Avatar, Badge, Button, Card, CardHeader, Empty, Field, inlineInputCls, inputCls, Loading, Modal, PageHeader, SearchBox } from '../../components/ui'
+import { useBase, useUser } from '../../lib/session'
+import { db } from '../../lib/db'
+import { isManager } from '../../lib/rules'
 import { TASK_KIND_LABEL, TASK_KIND_TONE } from '../../lib/labels'
 import { dateTime } from '../../lib/format'
 import type { Task, TaskKind } from '../../lib/types'
@@ -375,13 +378,17 @@ function TaskSettingsModal({ open, onClose }: { open: boolean; onClose: () => vo
 export function TasksPage() {
   const { data } = useTasks()
   const setStatus = useSetTaskStatus()
+  const user = useUser()
   const [q, setQ] = useState('')
+  const [rep, setRep] = useState('')
   const [editing, setEditing] = useState<Task | null | 'new'>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   if (!data) return <Loading />
 
+  const manager = isManager(user)
+  const owners = db.profiles.filter(p => data.some(t => t.assigned_to === p.id))
   const needle = q.toLowerCase()
-  const base = data.filter(t => t.status !== 'cancelled' && (!needle || [t.title, t.lead_name, t.property_title].some(v => v?.toLowerCase().includes(needle))))
+  const base = data.filter(t => t.status !== 'cancelled' && (!rep || t.assigned_to === rep) && (!needle || [t.title, t.lead_name, t.property_title, t.assignee_name].some(v => v?.toLowerCase().includes(needle))))
 
   const counts: Record<string, number> = {}
   for (const col of COLUMNS) counts[col.key] = base.filter(col.match).length
@@ -393,6 +400,12 @@ export function TasksPage() {
         subtitle="Follow-ups, meetings and site visits, split by where they stand"
         actions={<>
           <SearchBox value={q} onChange={setQ} placeholder="Search tasks" label="Search tasks" className="w-full sm:w-64" />
+          {manager && owners.length > 1 && (
+            <select value={rep} onChange={e => setRep(e.target.value)} className={`${inlineInputCls} max-w-44`} aria-label="Filter by assignee">
+              <option value="">Everyone</option>
+              {owners.map(p => <option key={p.id} value={p.id}>{p.full_name}{p.id === user.id ? ' (me)' : ''}</option>)}
+            </select>
+          )}
           <Button variant="secondary" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4 text-slate-500" /> Settings</Button>
           <Button onClick={() => setEditing('new')}><Plus className="size-4" /> New task</Button>
         </>}
@@ -415,7 +428,7 @@ export function TasksPage() {
               />
               {rows.length ? (
                 <ul className="max-h-[70vh] divide-y divide-slate-100 overflow-y-auto">
-                  {rows.map(t => <TaskLine key={t.id} t={t} overdue={key === 'overdue'} onOpen={() => setEditing(t)} onToggle={() => setStatus.mutate({ id: t.id, status: t.status === 'done' ? 'pending' : 'done' })} />)}
+                  {rows.map(t => <TaskLine key={t.id} t={t} owner={manager && !rep && t.assigned_to !== user.id ? t.assignee_name : null} overdue={key === 'overdue'} onOpen={() => setEditing(t)} onToggle={() => setStatus.mutate({ id: t.id, status: t.status === 'done' ? 'pending' : 'done' })} />)}
                 </ul>
               ) : (
                 <Empty icon={icon}>{key === 'overdue' ? 'Nothing overdue.' : key === 'done' ? 'Nothing finished yet.' : key === 'future' ? 'Nothing upcoming.' : 'Nothing pending.'}</Empty>
@@ -432,7 +445,8 @@ export function TasksPage() {
   )
 }
 
-function TaskLine({ t, overdue, onOpen, onToggle }: { t: TaskRow; overdue: boolean; onOpen: () => void; onToggle: () => void }) {
+function TaskLine({ t, owner, overdue, onOpen, onToggle }: { t: TaskRow; owner: string | null; overdue: boolean; onOpen: () => void; onToggle: () => void }) {
+  const root = useBase()
   const done = t.status === 'done'
   return (
     <li className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50">
@@ -451,12 +465,15 @@ function TaskLine({ t, overdue, onOpen, onToggle }: { t: TaskRow; overdue: boole
         </span>
         {(t.lead_name || t.property_title) && (
           <span className="mt-0.5 block truncate text-xs text-slate-400">
-            {t.lead_id ? <Link to={`/leads/${t.lead_id}`} onClick={e => e.stopPropagation()} className="font-medium text-slate-600 hover:underline">{t.lead_name}</Link> : null}
+            {t.lead_id ? <Link to={`${root}/leads/${t.lead_id}`} onClick={e => e.stopPropagation()} className="font-medium text-slate-600 hover:underline">{t.lead_name}</Link> : null}
             {t.lead_id && t.property_title ? ' · ' : ''}{t.property_title}
           </span>
         )}
       </button>
-      <Badge tone={TASK_KIND_TONE[t.kind]}>{TASK_KIND_LABEL[t.kind]}</Badge>
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <Badge tone={TASK_KIND_TONE[t.kind]}>{TASK_KIND_LABEL[t.kind]}</Badge>
+        {owner && <span className="flex items-center gap-1 text-[11px] text-slate-500" title={`Assigned to ${owner}`}><Avatar name={owner} size="xs" />{owner.split(' ')[0]}</span>}
+      </span>
     </li>
   )
 }

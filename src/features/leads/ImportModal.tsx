@@ -5,6 +5,8 @@ import { budget } from '../../lib/format'
 import { SOURCE_LABEL } from '../../lib/labels'
 import { mapHeaders, parseRows, type Field as SheetField, type SheetRow } from './importSheet'
 import { useImportLeads } from './api'
+import { useUser } from '../../lib/session'
+import { isManager } from '../../lib/rules'
 import { usePipelines } from '../pipeline/api'
 
 /** A sheet is read in the browser, so cap it rather than freezing the tab on a 50k-row export. */
@@ -17,6 +19,7 @@ const COLUMNS: [SheetField, string][] = [
 ]
 
 export function ImportLeadsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const user = useUser()
   const { data: pipes } = usePipelines()
   const [sheet, setSheet] = useState<SheetRow[] | null>(null)
   const [name, setName] = useState('')
@@ -174,7 +177,7 @@ export function ImportLeadsModal({ open, onClose }: { open: boolean; onClose: ()
             <Button variant="secondary" onClick={close}>Cancel</Button>
             <Button
               disabled={!valid.length || imp.isPending}
-              onClick={() => imp.mutate(valid.map(r => r.input!))}
+              onClick={() => imp.mutate(valid.map(r => (isManager(user) || r.input!.assigned_to ? r.input! : { ...r.input!, assigned_to: user.id })))}
             >
               {imp.isPending ? <><Loader2 className="size-4 animate-spin" /> Importing…</> : <>Import {valid.length} {valid.length === 1 ? 'lead' : 'leads'}</>}
             </Button>

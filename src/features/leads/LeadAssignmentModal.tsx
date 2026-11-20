@@ -1,23 +1,25 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, type ReactNode } from 'react'
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   Filter,
   Layers,
   PieChart,
   Repeat,
-  Sparkles,
   UserCheck,
+  UserMinus,
 } from 'lucide-react'
 import {
   Avatar,
-  Badge,
   Button,
   ErrorText,
   Field,
   inputCls,
   Modal,
+  Segmented,
   StageChip,
+  Tabs,
 } from '../../components/ui'
 import { db, ok, refresh } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
@@ -59,11 +61,11 @@ export function LeadAssignmentModal({
 
   // For Round-Robin
   const [rrParticipantIds, setRrParticipantIds] = useState<string[]>([])
-  const [rrPoolType, setRrPoolType] = useState<'selected' | 'unassigned'>('selected')
+  const [rrPoolType, setRrPoolType] = useState<'selected' | 'unassigned'>(selectedLeadIds.length ? 'selected' : 'unassigned')
 
   // For Quota Distribution
   const [quotas, setQuotas] = useState<Record<string, number>>({})
-  const [quotaPoolType, setQuotaPoolType] = useState<'selected' | 'unassigned'>('selected')
+  const [quotaPoolType, setQuotaPoolType] = useState<'selected' | 'unassigned'>(selectedLeadIds.length ? 'selected' : 'unassigned')
 
   // Available groups/tags derived from lead records
   const availableGroups = useMemo(() => {
@@ -277,39 +279,34 @@ export function LeadAssignmentModal({
   }
 
   const allStages = stagesOf('pl-1')
+  const unassignedCount = db.leads.filter(l => !l.assigned_to).length
+  const poolSize = (p: 'selected' | 'unassigned') => (p === 'selected' ? selectedLeadIds.length : unassignedCount)
+  const quotaTotal = Object.values(quotas).reduce((s, q) => s + (q || 0), 0)
+  const n = selectedLeadIds.length
+  const plural = (k: number) => `${k} lead${k === 1 ? '' : 's'}`
+  const pick = (id: string) => {
+    setSelectedRepId(id)
+    setError('')
+  }
+  const poolItems = [
+    ...(n ? [{ value: 'selected' as const, label: `Selected (${n})` }] : []),
+    { value: 'unassigned' as const, label: `All unassigned (${unassignedCount})` },
+  ]
 
   return (
-    <Modal open={open} onClose={onClose} title="Lead Assignment & Distribution" wide>
-      {/* 5-Tab Selector */}
-      <div className="mb-5 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
-        {[
-          { key: 'manual', label: 'Manual Selection', icon: UserCheck },
-          { key: 'group', label: 'Group / List', icon: Layers },
-          { key: 'filter', label: 'Filter-Based', icon: Filter },
-          { key: 'round_robin', label: 'Round-Robin', icon: Repeat },
-          { key: 'quota', label: 'Quota-Based', icon: PieChart },
-        ].map(m => {
-          const Icon = m.icon
-          const active = tab === m.key
-          return (
-            <button
-              key={m.key}
-              type="button"
-              onClick={() => {
-                setTab(m.key as MethodTab)
-                setError('')
-                setSuccessMsg('')
-              }}
-              className={`flex flex-1 min-w-32 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition-all ${
-                active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <Icon className={`size-3.5 ${active ? 'text-blue-600' : ''}`} />
-              {m.label}
-            </button>
-          )
-        })}
+    <Modal open={open} onClose={onClose} title="Assign leads" wide>
+      <div className="-mx-5 -mt-2 border-b border-slate-100 px-5">
+        <Tabs
+          value={tab}
+          onChange={t => {
+            setTab(t)
+            setError('')
+            setSuccessMsg('')
+          }}
+          items={METHODS.map(m => ({ value: m.key, label: m.label, icon: m.icon }))}
+        />
       </div>
+      <p className="mt-3 mb-4 text-xs text-slate-500">{METHODS.find(m => m.key === tab)?.hint}</p>
 
       {successMsg && (
         <div className="mb-4 flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
@@ -317,146 +314,97 @@ export function LeadAssignmentModal({
         </div>
       )}
 
-      {/* Tab 1: Manual Selection */}
       {tab === 'manual' && (
         <div className="space-y-4">
-          <div className="rounded-lg bg-blue-50/60 border border-blue-100 p-3 text-xs text-blue-900 flex items-center justify-between">
-            <span>
-              <b>{selectedLeadIds.length} lead(s)</b> currently selected for assignment.
-            </span>
-            <span className="text-[11px] text-blue-700">Method: Direct Manual Allocation</span>
-          </div>
-
-          <Field label="Assign Selected Leads To:">
-            <select
-              value={selectedRepId}
-              onChange={e => setSelectedRepId(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">-- Choose Sales Representative --</option>
-              <option value="unassigned">-- Unassign (Remove Owner) --</option>
-              {activeReps.map(r => (
-                <option key={r.id} value={r.id}>
-                  {r.full_name} ({r.email}) • {r.assigned_leads_count} currently assigned
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          {/* Conflict warning */}
-          {conflicts.length > 0 && selectedRepId && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="size-4 shrink-0 text-amber-600 mt-0.5" />
-                <div>
-                  <b>Conflicting Assignment Warning:</b>
-                  <p className="mt-0.5">
-                    {conflicts.length} of the selected leads are already assigned to other reps.
-                  </p>
-                  <label className="mt-2.5 flex items-center gap-2 cursor-pointer font-semibold text-amber-950">
-                    <input
-                      type="checkbox"
-                      checked={overrideConflict}
-                      onChange={e => setOverrideConflict(e.target.checked)}
-                      className="size-4 accent-amber-600 rounded"
-                    />
-                    Override existing assignments and transfer ownership to chosen rep
-                  </label>
+          {n ? (
+            <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3.5 py-3 ring-1 ring-slate-200/70">
+              <div className="flex -space-x-2">
+                {selectedLeads.slice(0, 4).map(l => (
+                  <Avatar key={l.id} name={nameOf(l)} size="sm" className="ring-2 ring-white" />
+                ))}
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-slate-900">{plural(n)} selected</div>
+                <div className="truncate text-xs text-slate-500">
+                  {selectedLeads.slice(0, 3).map(nameOf).join(', ')}
+                  {n > 3 && ` +${n - 3} more`}
                 </div>
               </div>
             </div>
+          ) : (
+            <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">
+              No leads selected. Tick leads in the table first, or use another method.
+            </p>
+          )}
+
+          <Section label="Assign to">
+            <RepList reps={activeReps} isSelected={id => selectedRepId === id} onPick={pick} allowUnassign />
+          </Section>
+
+          {conflicts.length > 0 && selectedRepId && (
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-amber-50 p-3 text-xs text-amber-900 ring-1 ring-amber-200">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <span className="flex-1">
+                <b>{plural(conflicts.length)}</b> already {conflicts.length === 1 ? 'has' : 'have'} an owner. Transfer
+                {conflicts.length === 1 ? ' it' : ' them'} anyway?
+              </span>
+              <input
+                type="checkbox"
+                checked={overrideConflict}
+                onChange={e => setOverrideConflict(e.target.checked)}
+                className="mt-0.5 size-4 rounded accent-amber-600"
+              />
+            </label>
           )}
 
           <ErrorText error={error} />
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button onClick={handleManualSubmit} disabled={busy || selectedLeadIds.length === 0}>
-              {busy ? 'Assigning…' : `Assign ${selectedLeadIds.length} Leads`}
-            </Button>
-          </div>
+          <Footer
+            onCancel={onClose}
+            onSubmit={handleManualSubmit}
+            busy={busy}
+            disabled={!n || !selectedRepId}
+            label={busy ? 'Assigning…' : selectedRepId === 'unassigned' ? `Unassign ${plural(n)}` : `Assign ${plural(n)}`}
+          />
         </div>
       )}
 
-      {/* Tab 2: Group / List / Campaign Assignment */}
       {tab === 'group' && (
         <div className="space-y-4">
-          <p className="text-xs text-slate-500">
-            Assign an entire lead list, marketing campaign, project inquiry pool, or tag to a sales representative in one click.
-          </p>
-
-          <Field label="Select Lead Group / Campaign / List:">
-            <select
-              value={selectedGroup}
-              onChange={e => setSelectedGroup(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">-- Select a group / campaign --</option>
+          <Section label="Group">
+            <select value={selectedGroup} onChange={e => setSelectedGroup(e.target.value)} className={inputCls}>
+              <option value="">Choose a project, locality or referral list</option>
               {availableGroups.map(g => (
                 <option key={g} value={g}>
                   {g}
                 </option>
               ))}
             </select>
-          </Field>
+            {selectedGroup && (
+              <p className="mt-1.5 text-xs text-slate-500">{plural(groupMatchedLeads.length)} in this group</p>
+            )}
+          </Section>
 
-          {selectedGroup && (
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs">
-              <div className="flex items-center justify-between font-medium text-slate-900">
-                <span>Matching Leads in "{selectedGroup}":</span>
-                <Badge tone="blue">{groupMatchedLeads.length} leads</Badge>
-              </div>
-            </div>
-          )}
-
-          <Field label="Assign Entire Group To:">
-            <select
-              value={selectedRepId}
-              onChange={e => setSelectedRepId(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">-- Choose Sales Representative --</option>
-              {activeReps.map(r => (
-                <option key={r.id} value={r.id}>
-                  {r.full_name} ({r.assigned_leads_count} current)
-                </option>
-              ))}
-            </select>
-          </Field>
+          <Section label="Assign to">
+            <RepList reps={activeReps} isSelected={id => selectedRepId === id} onPick={pick} />
+          </Section>
 
           <ErrorText error={error} />
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleGroupSubmit}
-              disabled={busy || !selectedGroup || groupMatchedLeads.length === 0}
-            >
-              {busy ? 'Assigning Group…' : `Assign All ${groupMatchedLeads.length} Leads`}
-            </Button>
-          </div>
+          <Footer
+            onCancel={onClose}
+            onSubmit={handleGroupSubmit}
+            busy={busy}
+            disabled={!selectedGroup || !groupMatchedLeads.length || !selectedRepId}
+            label={busy ? 'Assigning…' : `Assign ${plural(groupMatchedLeads.length)}`}
+          />
         </div>
       )}
 
-      {/* Tab 3: Filter-Based Bulk Assignment */}
       {tab === 'filter' && (
         <div className="space-y-4">
-          <p className="text-xs text-slate-500">
-            Filter leads by source, status, or location, review matching count, and assign all matching leads in bulk.
-          </p>
-
           <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Lead Source">
-              <select
-                value={filterSource}
-                onChange={e => setFilterSource(e.target.value)}
-                className={inputCls}
-              >
-                <option value="">All Sources</option>
+            <Field label="Source">
+              <select value={filterSource} onChange={e => setFilterSource(e.target.value)} className={inputCls}>
+                <option value="">All sources</option>
                 {Object.entries(SOURCE_LABEL).map(([v, l]) => (
                   <option key={v} value={v}>
                     {l}
@@ -464,14 +412,9 @@ export function LeadAssignmentModal({
                 ))}
               </select>
             </Field>
-
-            <Field label="Stage / Status">
-              <select
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-                className={inputCls}
-              >
-                <option value="">All Stages</option>
+            <Field label="Stage">
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className={inputCls}>
+                <option value="">All stages</option>
                 {allStages.map(s => (
                   <option key={s.id} value={s.id}>
                     {s.label}
@@ -479,7 +422,6 @@ export function LeadAssignmentModal({
                 ))}
               </select>
             </Field>
-
             <Field label="City">
               <input
                 value={filterCity}
@@ -490,226 +432,261 @@ export function LeadAssignmentModal({
             </Field>
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
             <input
               type="checkbox"
               checked={filterUnassignedOnly}
               onChange={e => setFilterUnassignedOnly(e.target.checked)}
               className="size-4 rounded accent-blue-600"
             />
-            Match only unassigned leads (do not reassign already assigned ones)
+            Only unassigned leads
           </label>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-800">
-              <span>Matching Leads Preview:</span>
-              <span className="text-blue-600">{filterMatchedLeads.length} total matches</span>
+          <div className="rounded-xl ring-1 ring-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 px-3.5 py-2 text-xs">
+              <span className="font-medium text-slate-700">Matches</span>
+              <span className="font-semibold text-slate-900">{filterMatchedLeads.length}</span>
             </div>
-            {filterMatchedLeads.length > 0 && (
-              <div className="mt-2 divide-y divide-slate-100 max-h-36 overflow-y-auto pr-1">
-                {filterMatchedLeads.slice(0, 5).map(l => {
-                  const c = db.contacts.find(con => con.id === l.contact_id)
-                  return (
-                    <div key={l.id} className="py-1.5 flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-medium text-slate-900">{c?.name || 'Lead'}</span>
-                        <span className="ml-2 text-slate-400">({l.source})</span>
-                      </div>
-                      <StageChip status={l.status} />
+            {filterMatchedLeads.length ? (
+              <div className="divide-y divide-slate-100">
+                {filterMatchedLeads.slice(0, 4).map(l => (
+                  <div key={l.id} className="flex items-center justify-between gap-2 px-3.5 py-2 text-xs">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Avatar name={nameOf(l)} size="xs" />
+                      <span className="truncate font-medium text-slate-900">{nameOf(l)}</span>
+                      <span className="text-slate-400">{SOURCE_LABEL[l.source]}</span>
                     </div>
-                  )
-                })}
+                    <StageChip status={l.status} />
+                  </div>
+                ))}
+                {filterMatchedLeads.length > 4 && (
+                  <p className="px-3.5 py-2 text-center text-[11px] text-slate-400">
+                    +{filterMatchedLeads.length - 4} more
+                  </p>
+                )}
               </div>
-            )}
-            {filterMatchedLeads.length > 5 && (
-              <p className="mt-1 text-[11px] text-slate-400 text-center">
-                + {filterMatchedLeads.length - 5} more matching leads
-              </p>
+            ) : (
+              <p className="px-3.5 py-3 text-center text-xs text-slate-400">No leads match these filters.</p>
             )}
           </div>
 
-          <Field label="Assign All Filtered Leads To:">
-            <select
-              value={selectedRepId}
-              onChange={e => setSelectedRepId(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">-- Choose Sales Representative --</option>
-              {activeReps.map(r => (
-                <option key={r.id} value={r.id}>
-                  {r.full_name} ({r.assigned_leads_count} currently assigned)
-                </option>
-              ))}
-            </select>
-          </Field>
+          <Section label="Assign to">
+            <RepList reps={activeReps} isSelected={id => selectedRepId === id} onPick={pick} />
+          </Section>
 
           <ErrorText error={error} />
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleFilterSubmit}
-              disabled={busy || filterMatchedLeads.length === 0}
-            >
-              {busy ? 'Assigning…' : `Confirm & Assign ${filterMatchedLeads.length} Leads`}
-            </Button>
-          </div>
+          <Footer
+            onCancel={onClose}
+            onSubmit={handleFilterSubmit}
+            busy={busy}
+            disabled={!filterMatchedLeads.length || !selectedRepId}
+            label={busy ? 'Assigning…' : `Assign ${plural(filterMatchedLeads.length)}`}
+          />
         </div>
       )}
 
-      {/* Tab 4: Round-Robin Distribution */}
       {tab === 'round_robin' && (
         <div className="space-y-4">
-          <p className="text-xs text-slate-500">
-            Auto-distribute leads in equal round-robin rotation across multiple selected sales representatives.
-          </p>
+          <Section label="Leads to distribute">
+            <Segmented label="Lead pool" value={rrPoolType} onChange={setRrPoolType} items={poolItems} />
+          </Section>
 
-          <Field label="Source Pool:">
-            <select
-              value={rrPoolType}
-              onChange={e => setRrPoolType(e.target.value as any)}
-              className={inputCls}
-            >
-              {selectedLeadIds.length > 0 && (
-                <option value="selected">Currently Selected Leads ({selectedLeadIds.length})</option>
-              )}
-              <option value="unassigned">All Unassigned Leads ({db.leads.filter(l => !l.assigned_to).length})</option>
-            </select>
-          </Field>
-
-          <div>
-            <span className="mb-2 block text-xs font-semibold text-slate-700">
-              Select Participating Sales Representatives (at least 2):
-            </span>
-            <div className="grid gap-2 sm:grid-cols-2 max-h-48 overflow-y-auto">
-              {activeReps.map(r => {
-                const selected = rrParticipantIds.includes(r.id)
-                return (
-                  <label
-                    key={r.id}
-                    className={`flex items-center gap-3 rounded-lg border p-2.5 cursor-pointer text-xs transition-colors ${
-                      selected ? 'border-blue-500 bg-blue-50/40 text-blue-900' : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={e => {
-                        if (e.target.checked) setRrParticipantIds(prev => [...prev, r.id])
-                        else setRrParticipantIds(prev => prev.filter(id => id !== r.id))
-                      }}
-                      className="size-4 accent-blue-600 rounded"
-                    />
-                    <Avatar name={r.full_name} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold truncate">{r.full_name}</div>
-                      <div className="text-[11px] text-slate-400">{r.assigned_leads_count} current leads</div>
-                    </div>
-                  </label>
-                )
-              })}
-            </div>
-          </div>
-
-          {rrParticipantIds.length > 1 && (
-            <div className="rounded-xl bg-blue-50 p-3 text-xs text-blue-900 border border-blue-100 flex items-center justify-between">
-              <div>
-                <span className="font-semibold">Distribution Preview:</span>
-                <p className="mt-0.5 text-blue-700">
-                  Leads will be assigned in balanced rotation (~
-                  {Math.round(
-                    (rrPoolType === 'selected'
-                      ? selectedLeadIds.length
-                      : rrPoolType === 'unassigned'
-                        ? db.leads.filter(l => !l.assigned_to).length
-                        : db.leads.length) / rrParticipantIds.length,
-                  )}{' '}
-                  leads each).
-                </p>
-              </div>
-              <Sparkles className="size-5 text-blue-600 shrink-0" />
-            </div>
-          )}
+          <Section
+            label="Reps in rotation"
+            aside={
+              rrParticipantIds.length > 1
+                ? `≈ ${Math.round(poolSize(rrPoolType) / rrParticipantIds.length)} each`
+                : 'Pick at least 2'
+            }
+          >
+            <RepList
+              reps={activeReps}
+              multi
+              isSelected={id => rrParticipantIds.includes(id)}
+              onPick={id =>
+                setRrParticipantIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
+              }
+            />
+          </Section>
 
           <ErrorText error={error} />
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button onClick={handleRoundRobinSubmit} disabled={busy || rrParticipantIds.length < 2}>
-              {busy ? 'Distributing…' : 'Execute Round-Robin'}
-            </Button>
-          </div>
+          <Footer
+            onCancel={onClose}
+            onSubmit={handleRoundRobinSubmit}
+            busy={busy}
+            disabled={rrParticipantIds.length < 2 || !poolSize(rrPoolType)}
+            label={busy ? 'Distributing…' : `Distribute ${plural(poolSize(rrPoolType))}`}
+          />
         </div>
       )}
 
-      {/* Tab 5: Quota-Based Distribution */}
       {tab === 'quota' && (
         <div className="space-y-4">
-          <p className="text-xs text-slate-500">
-            Set custom assignment numbers per representative (e.g. Senior Rep: 40, Junior Rep: 20) and distribute from the pool.
-          </p>
+          <Section label="Leads to distribute">
+            <Segmented label="Lead pool" value={quotaPoolType} onChange={setQuotaPoolType} items={poolItems} />
+          </Section>
 
-          <Field label="Source Pool to Draw From:">
-            <select
-              value={quotaPoolType}
-              onChange={e => setQuotaPoolType(e.target.value as any)}
-              className={inputCls}
-            >
-              {selectedLeadIds.length > 0 && (
-                <option value="selected">Currently Selected Leads ({selectedLeadIds.length})</option>
-              )}
-              <option value="unassigned">All Unassigned Leads ({db.leads.filter(l => !l.assigned_to).length})</option>
-            </select>
-          </Field>
-
-          <div className="space-y-2">
-            <span className="block text-xs font-semibold text-slate-700">Specify Lead Quota per Rep:</span>
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+          <Section
+            label="Leads per rep"
+            aside={
+              <span className={quotaTotal > poolSize(quotaPoolType) ? 'text-red-600' : ''}>
+                {quotaTotal} / {poolSize(quotaPoolType)} allocated
+              </span>
+            }
+          >
+            <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-xl ring-1 ring-slate-200">
               {activeReps.map(r => (
-                <div key={r.id} className="flex items-center justify-between p-3 text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <Avatar name={r.full_name} size="sm" />
-                    <div>
-                      <div className="font-semibold text-slate-900">{r.full_name}</div>
-                      <div className="text-[11px] text-slate-400">{r.assigned_leads_count} currently assigned</div>
-                    </div>
+                <div key={r.id} className="flex items-center gap-3 px-3.5 py-2.5">
+                  <Avatar name={r.full_name} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-slate-900">{r.full_name}</div>
+                    <div className="text-xs text-slate-500">{r.assigned_leads_count} leads now</div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400 text-xs">Quota:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={quotas[r.id] ?? ''}
-                      onChange={e => {
-                        const val = parseInt(e.target.value, 10) || 0
-                        setQuotas(q => ({ ...q, [r.id]: val }))
-                      }}
-                      placeholder="0"
-                      className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-xs font-semibold"
-                    />
-                    <span className="text-slate-400 text-xs">leads</span>
-                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={quotas[r.id] || ''}
+                    onChange={e => setQuotas(q => ({ ...q, [r.id]: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                    placeholder="0"
+                    aria-label={`Quota for ${r.full_name}`}
+                    className="w-20 rounded-lg border border-slate-200 px-2.5 py-1.5 text-right text-sm font-medium focus:border-blue-500 focus:outline-none"
+                  />
                 </div>
               ))}
             </div>
-          </div>
+          </Section>
 
           <ErrorText error={error} />
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button onClick={handleQuotaSubmit} disabled={busy}>
-              {busy ? 'Distributing…' : 'Apply Quotas & Distribute'}
-            </Button>
-          </div>
+          <Footer
+            onCancel={onClose}
+            onSubmit={handleQuotaSubmit}
+            busy={busy}
+            disabled={!quotaTotal || quotaTotal > poolSize(quotaPoolType)}
+            label={busy ? 'Distributing…' : `Distribute ${plural(quotaTotal)}`}
+          />
         </div>
       )}
     </Modal>
+  )
+}
+
+const METHODS: { key: MethodTab; label: string; icon: typeof UserCheck; hint: string }[] = [
+  { key: 'manual', label: 'Manual', icon: UserCheck, hint: 'Give the leads you ticked to one rep.' },
+  { key: 'group', label: 'Group', icon: Layers, hint: 'Hand a whole project, locality or referral list to one rep.' },
+  { key: 'filter', label: 'Filter', icon: Filter, hint: 'Match leads by source, stage or city, then assign them all.' },
+  { key: 'round_robin', label: 'Round-robin', icon: Repeat, hint: 'Rotate leads evenly across several reps.' },
+  { key: 'quota', label: 'Quota', icon: PieChart, hint: 'Set how many leads each rep gets.' },
+]
+
+const nameOf = (l: Lead) => db.contacts.find(c => c.id === l.contact_id)?.name ?? 'Lead'
+
+function Section({ label, aside, children }: { label: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-xs">
+        <span className="font-medium text-slate-700">{label}</span>
+        {aside && <span className="text-slate-500">{aside}</span>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+type Rep = { id: string; full_name: string; email: string; assigned_leads_count: number }
+
+/** Rep picker: one row per rep with current workload. Radio by default, checkboxes when `multi`. */
+function RepList({
+  reps,
+  isSelected,
+  onPick,
+  multi,
+  allowUnassign,
+}: {
+  reps: Rep[]
+  isSelected: (id: string) => boolean
+  onPick: (id: string) => void
+  multi?: boolean
+  allowUnassign?: boolean
+}) {
+  if (!reps.length)
+    return (
+      <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">
+        No active sales reps yet.
+      </p>
+    )
+  const max = Math.max(1, ...reps.map(r => r.assigned_leads_count))
+  const row = (id: string, avatar: ReactNode, name: string, sub: string, load?: number) => {
+    const sel = isSelected(id)
+    return (
+      <button
+        key={id}
+        type="button"
+        role={multi ? 'checkbox' : 'radio'}
+        aria-checked={sel}
+        onClick={() => onPick(id)}
+        className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors ${sel ? 'bg-blue-50/70' : 'hover:bg-slate-50'}`}
+      >
+        {avatar}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-slate-900">{name}</div>
+          <div className="truncate text-xs text-slate-500">{sub}</div>
+        </div>
+        {load !== undefined && (
+          <div className="hidden w-24 shrink-0 sm:block">
+            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-slate-400" style={{ width: `${(load / max) * 100}%` }} />
+            </div>
+            <div className="mt-1 text-right text-[11px] text-slate-500">{load} leads</div>
+          </div>
+        )}
+        <span
+          className={`flex size-5 shrink-0 items-center justify-center border ${multi ? 'rounded-md' : 'rounded-full'} ${sel ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'}`}
+        >
+          {sel && <Check className="size-3.5" strokeWidth={3} />}
+        </span>
+      </button>
+    )
+  }
+  return (
+    <div
+      role={multi ? 'group' : 'radiogroup'}
+      className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-xl ring-1 ring-slate-200"
+    >
+      {allowUnassign &&
+        row(
+          'unassigned',
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+            <UserMinus className="size-4" />
+          </span>,
+          'Unassign',
+          'Remove the current owner',
+        )}
+      {reps.map(r => row(r.id, <Avatar name={r.full_name} size="sm" />, r.full_name, r.email, r.assigned_leads_count))}
+    </div>
+  )
+}
+
+function Footer({
+  onCancel,
+  onSubmit,
+  busy,
+  disabled,
+  label,
+}: {
+  onCancel: () => void
+  onSubmit: () => void
+  busy: boolean
+  disabled: boolean
+  label: string
+}) {
+  return (
+    <div className="-mx-5 -mb-5 mt-5 flex justify-end gap-2 rounded-b-xl border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+      <Button variant="secondary" onClick={onCancel} disabled={busy}>
+        Cancel
+      </Button>
+      <Button onClick={onSubmit} disabled={busy || disabled}>
+        {label}
+      </Button>
+    </div>
   )
 }

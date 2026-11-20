@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import {
   Check,
   CheckSquare,
+  Phone,
   KanbanSquare,
   List,
   Plus,
@@ -36,7 +37,12 @@ export function SalesTasksPage() {
   const setTaskStatus = useSetTaskStatus()
 
   const [view, setView] = useState<'list' | 'kanban'>('list')
-  const [filterTab, setFilterTab] = useState<FilterTab>('all')
+  // Dashboard tiles link here with ?filter=today / ?filter=overdue.
+  const [params] = useSearchParams()
+  const [filterTab, setFilterTab] = useState<FilterTab>(() => {
+    const f = params.get('filter')
+    return f === 'today' || f === 'upcoming' || f === 'overdue' || f === 'completed' ? f : 'all'
+  })
   const [kindFilter, setKindFilter] = useState<string>('')
   const [search, setSearch] = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
@@ -307,12 +313,21 @@ export function SalesTasksPage() {
 
                         <td className={T.td} onClick={e => e.stopPropagation()}>
                           {lead && contact ? (
-                            <Link
-                              to={`/sales/leads/${lead.id}`}
-                              className="text-xs font-semibold text-blue-600 hover:underline block truncate max-w-36"
-                            >
-                              {contact.name}
-                            </Link>
+                            <div className="flex items-center gap-1.5">
+                              <Link
+                                to={`/sales/leads/${lead.id}`}
+                                className="block max-w-36 truncate text-xs font-semibold text-blue-600 hover:underline"
+                              >
+                                {contact.name}
+                              </Link>
+                              <a
+                                href={`tel:${contact.phone}`}
+                                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-blue-600"
+                                title={`Call ${contact.name}`}
+                              >
+                                <Phone className="size-3.5" />
+                              </a>
+                            </div>
                           ) : (
                             <span className="text-xs text-slate-400">—</span>
                           )}

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { Link } from 'react-router'
 import {
   CalendarDays,
   Check,
@@ -15,10 +16,9 @@ import {
   Segmented,
 } from '../../components/ui'
 import { useUser } from '../../lib/session'
-import { db, write, ok } from '../../lib/db'
-import { supabase } from '../../lib/supabase'
+import { db } from '../../lib/db'
 import { TASK_KIND_LABEL } from '../../lib/labels'
-import { isOverdue, useSetTaskStatus } from '../tasks/api'
+import { isOverdue, useSaveTask, useSetTaskStatus, useTasks } from '../tasks/api'
 import { SalesTaskModal } from './SalesTaskModal'
 import type { Task, TaskKind } from '../../lib/types'
 
@@ -56,12 +56,17 @@ export function SalesCalendarPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [creatingDue, setCreatingDue] = useState<Date | null>(null)
 
-  // SECURITY: Strictly scoped to own tasks
-  const myTasks = useMemo(() => {
-    return db.tasks.filter(
-      t => t.assigned_to === user.id && t.status !== 'cancelled' && (!kindFilter || t.kind === kindFilter),
-    )
-  }, [user.id, kindFilter])
+  const saveTask = useSaveTask()
+  useTasks() // re-render after any task write
+
+  // Own tasks only. Not memoised: db is a mutable mirror, a memo here showed stale tasks after edits.
+  const myTasks = db.tasks.filter(
+    t => t.assigned_to === user.id && t.status !== 'cancelled' && (!kindFilter || t.kind === kindFilter),
+  )
+  const leadName = (leadId: string | null) => {
+    const l = leadId ? db.leads.find(x => x.id === leadId) : null
+    return l ? db.contacts.find(c => c.id === l.contact_id)?.name : undefined
+  }
 
   // Calendar dates calculation
   const days = useMemo(() => {
@@ -113,31 +118,33 @@ export function SalesCalendarPage() {
     e.preventDefault()
   }
 
-  const handleDrop = async (e: React.DragEvent, targetDate: Date) => {
+  // Through useSaveTask so a drop gets the double-booking guard and a "Rescheduled" timeline entry.
+  const handleDrop = (e: React.DragEvent, targetDate: Date) => {
     e.preventDefault()
-    const taskId = e.dataTransfer.getData('text/plain')
-    const task = myTasks.find(t => t.id === taskId)
+    const task = myTasks.find(t => t.id === e.dataTransfer.getData('text/plain'))
     if (!task) return
-
     const oldDate = new Date(task.due_at)
     const newDate = new Date(targetDate)
     newDate.setHours(oldDate.getHours(), oldDate.getMinutes(), 0, 0)
-
-    let endsIso = null
-    if (task.ends_at) {
-      const oldEnds = new Date(task.ends_at)
-      const diff = oldEnds.getTime() - oldDate.getTime()
-      endsIso = new Date(newDate.getTime() + diff).toISOString()
-    }
-
-    await write(async () => {
-      ok(
-        await supabase
-          .from('tasks')
-          .update({ due_at: newDate.toISOString(), ends_at: endsIso })
-          .eq('id', taskId),
-      )
-    })
+    if (newDate.getTime() === oldDate.getTime()) return
+    const endsIso = task.ends_at
+      ? new Date(newDate.getTime() + Date.parse(task.ends_at) - oldDate.getTime()).toISOString()
+      : null
+    saveTask.mutate(
+      {
+        id: task.id,
+        input: {
+          title: task.title,
+          kind: task.kind,
+          lead_id: task.lead_id,
+          property_id: task.property_id,
+          assigned_to: task.assigned_to,
+          due_at: newDate.toISOString(),
+          ends_at: endsIso,
+        },
+      },
+      { onError: err => alert(err.message) },
+    )
   }
 
   return (
@@ -250,6 +257,18 @@ export function SalesCalendarPage() {
                           </div>
                           <div className="text-xs text-slate-400">
                             {timeFmt(t.due_at)} {t.ends_at && `– ${timeFmt(t.ends_at)}`} • {TASK_KIND_LABEL[t.kind]}
+                            {leadName(t.lead_id) && (
+                              <>
+                                {' • '}
+                                <Link
+                                  to={`/sales/leads/${t.lead_id}`}
+                                  onClick={e => e.stopPropagation()}
+                                  className="font-medium text-blue-600 hover:underline"
+                                >
+                                  {leadName(t.lead_id)}
+                                </Link>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -289,7 +308,7 @@ export function SalesCalendarPage() {
                     onDragOver={handleDragOver}
                     onDrop={e => handleDrop(e, d)}
                     onClick={() => setCreatingDue(d)}
-                    className={`min-h-[7.5rem] p-1.5 transition-colors cursor-pointer hover:bg-slate-50/70 ${
+                    className={`${view === 'week' ? 'min-h-[22rem]' : 'min-h-[7.5rem]'} p-1.5 transition-colors cursor-pointer hover:bg-slate-50/70 ${
                       !inMonth && view === 'month' ? 'bg-slate-50/40 text-slate-400' : 'bg-white'
                     }`}
                   >
@@ -307,7 +326,7 @@ export function SalesCalendarPage() {
                     </div>
 
                     <div className="space-y-1">
-                      {dayTasks.slice(0, 3).map(t => {
+                      {dayTasks.slice(0, view === 'week' ? undefined : 3).map(t => {
                         const overdue = isOverdue(t)
                         const isDone = t.status === 'done'
                         return (
@@ -329,10 +348,13 @@ export function SalesCalendarPage() {
                             <div className="font-semibold truncate">
                               {timeFmt(t.due_at)} {t.title}
                             </div>
+                            {view === 'week' && leadName(t.lead_id) && (
+                              <div className="truncate font-normal opacity-75">{leadName(t.lead_id)}</div>
+                            )}
                           </div>
                         )
                       })}
-                      {dayTasks.length > 3 && (
+                      {view === 'month' && dayTasks.length > 3 && (
                         <div className="text-[10px] text-slate-400 font-semibold text-center">
                           +{dayTasks.length - 3} more
                         </div>

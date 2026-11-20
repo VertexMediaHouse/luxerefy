@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router'
 import {
   Clock,
   Eye,
+  Pencil,
   Plus,
+  Power,
+  Trash2,
   TrendingUp,
   UserCheck,
   UserCog,
@@ -22,13 +25,37 @@ import {
 } from '../../components/ui'
 import { useSession } from '../../lib/session'
 import { relative } from '../../lib/format'
-import { useSalesUsers, useUpdateSalesUser, useDeleteSalesUser, type SalesUserData } from './api'
+import { repHealth, useSalesUsers, useUpdateSalesUser, useDeleteSalesUser, type SalesUserData } from './api'
+import { useLeads } from '../leads/api'
+import { useTasks } from '../tasks/api'
 import { SalesUserModal } from './SalesUserModal'
+
+function IconBtn({ label, onClick, icon: I, cls = 'hover:text-slate-800 hover:bg-slate-100' }: { label: string; onClick: () => void; icon: typeof Eye; cls?: string }) {
+  return (
+    <button type="button" onClick={onClick} title={label} aria-label={label} className={`rounded-md p-1.5 text-slate-400 transition-colors ${cls}`}>
+      <I className="size-4" />
+    </button>
+  )
+}
+
+/** Overdue tasks and open leads with nothing booked: the two ways a rep's pipeline goes cold. */
+export function HealthBadges({ id }: { id: string }) {
+  const h = repHealth(id)
+  if (!h.overdue && !h.noFollowUp) return <Badge tone="green">On track</Badge>
+  return (
+    <div className="flex flex-wrap gap-1">
+      {h.overdue > 0 && <Badge tone="red">{h.overdue} overdue</Badge>}
+      {h.noFollowUp > 0 && <Badge tone="amber">{h.noFollowUp} no follow-up</Badge>}
+    </div>
+  )
+}
 
 export function SalesTeamPage() {
   const nav = useNavigate()
   const { startImpersonating } = useSession()
   const { data: users = [], isLoading, error } = useSalesUsers()
+  useLeads() // subscribe so follow-up health follows every write
+  useTasks()
   const updateMutation = useUpdateSalesUser()
   const deleteMutation = useDeleteSalesUser()
 
@@ -51,9 +78,8 @@ export function SalesTeamPage() {
   const activeCount = salesUsers.filter(u => u.active).length
   const totalLeads = salesUsers.reduce((sum, u) => sum + u.assigned_leads_count, 0)
   const totalOpenTasks = salesUsers.reduce((sum, u) => sum + u.open_tasks_count, 0)
-  const avgConversion = salesUsers.length
-    ? Math.round(salesUsers.reduce((sum, u) => sum + u.conversion_rate, 0) / salesUsers.length)
-    : 0
+  // Weighted: one rep with 1 lead and 1 win shouldn't read as a 100% team.
+  const avgConversion = totalLeads ? Math.round((salesUsers.reduce((sum, u) => sum + u.won_deals, 0) / totalLeads) * 100) : 0
 
   const handleToggleActive = async (u: SalesUserData) => {
     if (confirm(`Are you sure you want to ${u.active ? 'deactivate' : 'activate'} ${u.full_name}?`)) {
@@ -87,7 +113,7 @@ export function SalesTeamPage() {
     <>
       <PageHeader
         icon={UserCog}
-        title="Sales Team Management"
+        title="Teams"
         subtitle="Manage sales representatives, view conversion performance, and assign lead quotas"
         actions={
           <Button
@@ -144,7 +170,7 @@ export function SalesTeamPage() {
 
         <Card className="p-4 sm:p-5">
           <div className="flex items-center gap-2 text-slate-500 text-xs font-medium uppercase tracking-wider">
-            <TrendingUp className="size-4 text-emerald-600" /> Avg Conversion
+            <TrendingUp className="size-4 text-emerald-600" /> Team Conversion
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-bold text-slate-900">{avgConversion}%</span>
@@ -183,6 +209,7 @@ export function SalesTeamPage() {
                   <th className={T.th}>Status</th>
                   <th className={T.th}>Assigned Leads</th>
                   <th className={T.th}>Open Tasks</th>
+                  <th className={T.th}>Follow-up health</th>
                   <th className={T.th}>Won Deals</th>
                   <th className={T.th}>Conversion</th>
                   <th className={T.th}>Last Login</th>
@@ -231,6 +258,10 @@ export function SalesTeamPage() {
                     </td>
 
                     <td className={T.td}>
+                      <HealthBadges id={u.id} />
+                    </td>
+
+                    <td className={T.td}>
                       <span className="font-medium text-emerald-600">{u.won_deals}</span>
                     </td>
 
@@ -257,43 +288,19 @@ export function SalesTeamPage() {
                         <button
                           type="button"
                           onClick={() => handleViewAs(u)}
-                          title="View as this user (read-only preview)"
+                          title="View as this user"
                           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
                         >
-                          <Eye className="size-3.5" /> View As
+                          <Eye className="size-3.5" /> View as
                         </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingUser(u)
-                            setModalOpen(true)
-                          }}
-                          className="rounded-md p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                          title="Edit user"
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
+                        <IconBtn label="Edit user" onClick={() => { setEditingUser(u); setModalOpen(true) }} icon={Pencil} />
+                        <IconBtn
+                          label={u.active ? 'Deactivate' : 'Reactivate'}
                           onClick={() => handleToggleActive(u)}
-                          className={`rounded-md p-1.5 text-xs font-medium ${
-                            u.active ? 'text-slate-400 hover:text-amber-600' : 'text-emerald-600 hover:underline'
-                          }`}
-                          title={u.active ? 'Deactivate' : 'Reactivate'}
-                        >
-                          {u.active ? 'Deactivate' : 'Activate'}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(u)}
-                          className="rounded-md p-1.5 text-slate-300 hover:text-red-600"
-                          title="Delete (soft delete)"
-                        >
-                          Delete
-                        </button>
+                          icon={Power}
+                          cls={u.active ? 'hover:text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}
+                        />
+                        <IconBtn label="Delete (soft delete)" onClick={() => handleDelete(u)} icon={Trash2} cls="hover:text-red-600 hover:bg-red-50" />
                       </div>
                     </td>
                   </tr>

@@ -12,7 +12,8 @@ import { useGoals, periodLabel } from '../goals/api'
 import { GoalBar } from '../goals/GoalParts'
 import { useProperties } from '../properties/api'
 import { PropertyCard } from '../properties/PropertiesPage'
-import { useSalesUsers } from '../sales-team/api'
+import { repHealth, useSalesUsers } from '../sales-team/api'
+import { isOpen } from '../../lib/rules'
 import { db } from '../../lib/db'
 import { useDashboard } from './api'
 
@@ -173,6 +174,7 @@ export function DashboardPage() {
   const overdueCount = live.filter(isOverdue).length
   const monthly = goals.filter(g => g.period === 'monthly' && g.target > 0)
   const yearly = goals.filter(g => g.period === 'yearly' && g.target > 0)
+  const unassigned = db.leads.filter(l => isOpen(l) && !l.assigned_to).length
 
   return (
     <>
@@ -355,9 +357,9 @@ export function DashboardPage() {
         <Card>
           <CardHeader
             icon={Award}
-            title="Sales Team Leaderboard"
+            title="Team Leaderboard"
             subtitle="Won deals and conversion performance"
-            action={<HeaderLink to="/sales-team">Sales team</HeaderLink>}
+            action={<HeaderLink to="/sales-team">Teams</HeaderLink>}
           />
           <div className="divide-y divide-slate-100 p-2">
             {salesUsers.filter(u => u.active).length === 0 ? (
@@ -415,8 +417,8 @@ export function DashboardPage() {
         <Card>
           <CardHeader
             icon={UserCheck}
-            title="Leads by Status per User"
-            subtitle="Active distribution across pipeline stages"
+            title="Team follow-up health"
+            subtitle={unassigned ? `${unassigned} open ${unassigned === 1 ? 'lead is' : 'leads are'} unassigned` : 'Who is keeping their pipeline warm'}
             action={<HeaderLink to="/leads">All leads</HeaderLink>}
           />
           <div className="overflow-x-auto p-3">
@@ -424,31 +426,22 @@ export function DashboardPage() {
               <thead>
                 <tr className="border-b border-slate-100 text-left text-slate-400">
                   <th className="py-2 pr-2 font-medium">Rep</th>
-                  <th className="py-2 px-1 text-center font-medium">New</th>
-                  <th className="py-2 px-1 text-center font-medium">Visit</th>
-                  <th className="py-2 px-1 text-center font-medium">Meeting</th>
-                  <th className="py-2 px-1 text-center font-medium">Won</th>
-                  <th className="py-2 pl-2 text-right font-medium">Total</th>
+                  <th className="py-2 px-1 text-center font-medium">Open</th>
+                  <th className="py-2 px-1 text-center font-medium">Overdue</th>
+                  <th className="py-2 px-1 text-center font-medium">No follow-up</th>
+                  <th className="py-2 pl-2 text-right font-medium">Won</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {salesUsers.filter(u => u.active).map(u => {
-                  const uLeads = db.leads.filter(l => l.assigned_to === u.id)
-                  const newCount = uLeads.filter(l => l.status.endsWith('-new')).length
-                  const visitCount = uLeads.filter(l => l.status.includes('visit')).length
-                  const meetingCount = uLeads.filter(l => l.status.includes('meeting')).length
-                  const wonCount = uLeads.filter(l => l.status.endsWith('-won')).length
-
+                  const h = repHealth(u.id)
                   return (
-                    <tr key={u.id} className="hover:bg-slate-50">
-                      <td className="py-2 pr-2 font-semibold text-slate-800 truncate max-w-28">
-                        {u.full_name}
-                      </td>
-                      <td className="py-2 px-1 text-center text-slate-600">{newCount}</td>
-                      <td className="py-2 px-1 text-center text-blue-600 font-medium">{visitCount}</td>
-                      <td className="py-2 px-1 text-center text-purple-600 font-medium">{meetingCount}</td>
-                      <td className="py-2 px-1 text-center text-emerald-600 font-bold">{wonCount}</td>
-                      <td className="py-2 pl-2 text-right font-bold text-slate-900">{uLeads.length}</td>
+                    <tr key={u.id} className="cursor-pointer hover:bg-slate-50" onClick={() => nav(`/sales-team/${u.id}`)}>
+                      <td className="max-w-32 truncate py-2 pr-2 font-semibold text-slate-800">{u.full_name}</td>
+                      <td className="px-1 py-2 text-center text-slate-600">{h.open}</td>
+                      <td className={`px-1 py-2 text-center font-semibold ${h.overdue ? 'text-red-600' : 'text-slate-300'}`}>{h.overdue}</td>
+                      <td className={`px-1 py-2 text-center font-semibold ${h.noFollowUp ? 'text-amber-600' : 'text-slate-300'}`}>{h.noFollowUp}</td>
+                      <td className="py-2 pl-2 text-right font-bold text-emerald-600">{u.won_deals}</td>
                     </tr>
                   )
                 })}

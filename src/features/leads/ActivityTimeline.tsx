@@ -1,4 +1,5 @@
 import { Link } from 'react-router'
+import { useBase } from '../../lib/session'
 import { ArrowRightLeft, CalendarClock, MessageSquare, MessageSquareText, Phone, Sparkles, StickyNote, UserCheck, Activity } from 'lucide-react'
 import type { ActivityType } from '../../lib/types'
 import { dateTime, relative } from '../../lib/format'
@@ -17,6 +18,7 @@ const ICON: Record<ActivityType, [typeof Phone, string]> = {
 }
 
 export function ActivityTimeline({ items, showLead }: { items: FeedItem[]; showLead?: boolean }) {
+  const root = useBase()
   if (!items.length) return <Empty icon={Activity}>No activity yet.</Empty>
   return (
     <ol className="relative space-y-5 before:absolute before:top-2 before:bottom-2 before:left-[15px] before:w-px before:bg-gradient-to-b before:from-slate-200 before:to-transparent">
@@ -29,7 +31,7 @@ export function ActivityTimeline({ items, showLead }: { items: FeedItem[]; showL
             </span>
             <div className="min-w-0 pt-1">
               <p className="text-sm text-slate-800">
-                {showLead && <><Link to={`/leads/${a.lead_id}`} className="font-semibold text-slate-900 hover:text-blue-700">{a.lead.name}</Link>{': '}</>}
+                {showLead && <><Link to={`${root}/leads/${a.lead_id}`} className="font-semibold text-slate-900 hover:text-blue-700">{a.lead.name}</Link>{': '}</>}
                 {a.body}
               </p>
               <p className="mt-0.5 text-xs text-slate-500" title={dateTime(a.created_at)}>

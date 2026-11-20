@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router'
 import {
   CalendarDays,
@@ -17,7 +17,8 @@ import { Avatar } from '../../components/ui'
 import { useSession, useUser } from '../../lib/session'
 import { toggleEyeSafe, useEyeSafe } from '../../lib/eyeSafe'
 import { db } from '../../lib/db'
-import { isOverdue } from '../tasks/api'
+import { isOverdue, useTasks } from '../tasks/api'
+import { useLeads } from '../leads/api'
 
 export function SalesLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -25,6 +26,9 @@ export function SalesLayout() {
   const { signOut, isImpersonating, stopImpersonating } = useSession()
   const nav = useNavigate()
   const warm = useEyeSafe()
+  // Subscribe so the sidebar counts follow every write.
+  useLeads()
+  useTasks()
 
   // Own leads & tasks count
   const myLeads = db.leads.filter(l => l.assigned_to === user.id)
@@ -32,13 +36,8 @@ export function SalesLayout() {
   const myTasks = db.tasks.filter(t => t.assigned_to === user.id && t.status === 'pending')
   const myOverdueTasks = myTasks.filter(isOverdue)
 
-  // Track new assignments count for notification badge
-  const [unreadAssigned, setUnreadAssigned] = useState(0)
-  useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    const newToday = myLeads.filter(l => l.created_at.slice(0, 10) === today).length
-    setUnreadAssigned(newToday)
-  }, [myLeads.length])
+  const today = new Date().toISOString().slice(0, 10)
+  const unreadAssigned = myLeads.filter(l => l.created_at.slice(0, 10) === today).length
 
   const navItems = [
     { to: '/sales', label: 'Dashboard', icon: LayoutDashboard, end: true },

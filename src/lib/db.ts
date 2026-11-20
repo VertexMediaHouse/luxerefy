@@ -15,11 +15,20 @@ const TABLES = Object.keys(db) as (keyof Tables)[]
 
 /** Pull every readable row into the mirror. Throws on a real failure (bad key, project down). */
 export async function refresh() {
-  const results = await Promise.all(TABLES.map(t => supabase.from(t).select('*')))
-  results.forEach((r, i) => {
-    if (r.error) throw new Error(`${TABLES[i]}: ${r.error.message}`)
-    ;(db[TABLES[i]] as unknown[]) = r.data ?? []
-  })
+  const results = await Promise.all(TABLES.map(selectAll))
+  results.forEach((rows, i) => { (db[TABLES[i]] as unknown[]) = rows })
+}
+
+/** PostgREST caps a response at 1000 rows, so read in pages. Without this, backups silently drop rows. */
+const PAGE = 1000
+async function selectAll(t: keyof Tables) {
+  const rows: unknown[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from(t).select('*').order('id').range(from, from + PAGE - 1)
+    if (error) throw new Error(`${t}: ${error.message}`)
+    rows.push(...data)
+    if (data.length < PAGE) return rows
+  }
 }
 
 /** Bootstrap / re-bootstrap the mirror. Kept as two names because session.tsx and BackupPage use both. */
@@ -29,10 +38,14 @@ export const reload = refresh
 /** Kept so call sites that just hand back a value don't need to change. */
 export const respond = <T,>(value: T) => Promise.resolve(value)
 
+/** Set by main.tsx: lets a bare write() (outside useMutation) re-render the pages reading the mirror. */
+export const writeHooks = { after: () => {} }
+
 /** Run a real write against Supabase, then refresh the mirror. Throwing inside fn rejects like a failed RLS check. */
 export async function write<T>(fn: () => T | Promise<T>): Promise<T> {
   const out = await fn()
   await refresh()
+  writeHooks.after()
   return out
 }
 

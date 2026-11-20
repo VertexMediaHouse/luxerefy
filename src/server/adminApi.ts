@@ -48,6 +48,7 @@ async function setActive(sb: SupabaseClient, id: string, active: boolean) {
 
 export async function handleAdminApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
   const pathname = (req.url || '').split('?')[0]
+  if (pathname === '/api/admin/ticket-email' && req.method === 'POST') return ticketEmail(req, res)
   if (!pathname.startsWith('/api/admin/sales-users')) return next()
   const method = req.method || 'GET'
 
@@ -151,6 +152,36 @@ export async function handleAdminApi(req: IncomingMessage, res: ServerResponse, 
     return sendJson(res, 404, { error: 'Endpoint not found' })
   } catch (err: any) {
     console.error('Admin API error:', err)
+    return sendJson(res, 500, { error: err.message || 'Internal server error' })
+  }
+}
+
+/** Emails a new ticket via Resend. Only the ticket's raiser can trigger it; content is read from the DB,
+ *  so the endpoint can't be used to send arbitrary mail. Same contract as public/api/admin/ticket-email.php. */
+async function ticketEmail(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const env = loadEnv('', process.cwd(), '')
+    if (!env.RESEND_API_KEY) return sendJson(res, 500, { error: 'RESEND_API_KEY missing' })
+    const sb = getSupabaseAdmin()
+    const token = req.headers.authorization?.replace(/^Bearer /, '')
+    const user = token ? (await sb.auth.getUser(token)).data.user : null
+    const { id } = await parseBody(req)
+    const { data: t } = await sb.from('tickets').select('number, title, description, raised_by').eq('id', id).single()
+    if (!user || !t || t.raised_by !== user.id) return sendJson(res, 403, { error: 'Not your ticket' })
+    const { data: p } = await sb.from('profiles').select('full_name').eq('id', user.id).single()
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: env.TICKET_EMAIL_FROM || 'Luxerefy CRM <onboarding@resend.dev>',
+        to: env.TICKET_EMAIL_TO || 'dhrumil@vertexmediahouse.com',
+        subject: `[Ticket #${t.number}] ${t.title}`,
+        text: `${t.description}\n\n— Raised by ${p?.full_name ?? user.email}`,
+      }),
+    })
+    const body: any = await r.json().catch(() => ({}))
+    return sendJson(res, r.ok ? 200 : 502, r.ok ? { success: true } : { error: body.message || 'Email failed' })
+  } catch (err: any) {
     return sendJson(res, 500, { error: err.message || 'Internal server error' })
   }
 }

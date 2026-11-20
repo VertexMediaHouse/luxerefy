@@ -1,5 +1,6 @@
 import { useState, type DragEvent } from 'react'
 import { Link } from 'react-router'
+import { useBase } from '../../lib/session'
 import { Building2, CalendarCheck, Clock, FileText, MessageSquare, Phone, Plus, Trash2, Users } from 'lucide-react'
 import { Avatar, StageIcon, TONE_HEX } from '../../components/ui'
 import { SOURCE_LABEL } from '../../lib/labels'
@@ -38,7 +39,7 @@ function TaskIcon({ kind }: { kind: string }) {
   return <Clock className="size-3 shrink-0" />
 }
 
-function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDrag: (id: string | null) => void }) {
+function LeadCard({ l, dragging, onDrag, base }: { l: LeadRow; dragging: boolean; onDrag: (id: string | null) => void; base: string }) {
   const task = l.next_task
   const overdue = !!task && Date.parse(task.due_at) < Date.now()
   const assignee = l.assigned_to ? db.profiles.find(p => p.id === l.assigned_to) : null
@@ -46,7 +47,7 @@ function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDr
 
   return (
     <Link
-      to={`/leads/${l.id}`}
+      to={`${base}/${l.id}`}
       draggable
       onDragStart={e => {
         e.dataTransfer.setData('text/plain', l.id)
@@ -191,7 +192,9 @@ function LeadCard({ l, dragging, onDrag }: { l: LeadRow; dragging: boolean; onDr
  * Dragging a card onto a column writes the stage change; the detail page stepper remains
  * the keyboard route, since native HTML5 drag has no keyboard equivalent.
  */
-export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages }: { leads: LeadRow[]; pipelineId?: string; limit?: number; onAdd?: () => void; visibleStages?: string[] }) {
+export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages, base: baseProp }: { leads: LeadRow[]; pipelineId?: string; limit?: number; onAdd?: () => void; visibleStages?: string[]; base?: string }) {
+  const root = useBase()
+  const base = baseProp ?? `${root}/leads`
   const [drag, setDrag] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const move = useMoveLead()
@@ -253,7 +256,7 @@ export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages }: { 
                   const idleDays = Math.floor((Date.now() - Date.parse(l.updated_at)) / DAY)
                   return (
                     <div key={l.id} className="relative">
-                      <LeadCard l={l} dragging={drag === l.id} onDrag={setDrag} />
+                      <LeadCard l={l} dragging={drag === l.id} onDrag={setDrag} base={base} />
                       {idleDays >= 5 && (
                         <span
                           className="absolute -right-1.5 -top-1.5 z-10 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm"
@@ -265,7 +268,7 @@ export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages }: { 
                     </div>
                   )
                 })}
-                {col.length > shown.length && <Link to={`/leads?pipeline=${pid}&status=${s.id}`} className="block rounded-xl py-1.5 text-center text-xs font-medium text-slate-500 hover:bg-white hover:text-slate-900">{col.length - shown.length} more</Link>}
+                {col.length > shown.length && <Link to={`${base}?pipeline=${pid}&status=${s.id}`} className="block rounded-xl py-1.5 text-center text-xs font-medium text-slate-500 hover:bg-white hover:text-slate-900">{col.length - shown.length} more</Link>}
                 {!col.length && (
                   <p className={`py-8 text-center text-xs transition-colors ${active ? 'text-slate-500' : 'text-slate-400'}`}>
                     {active ? `Drop in ${s.label}` : 'No leads'}

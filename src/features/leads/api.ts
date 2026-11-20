@@ -151,6 +151,17 @@ export function useDeleteLead() {
   })
 }
 
+export function useDeleteLeads() {
+  const user = useUser()
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      write(async () => {
+        ids.forEach(id => ownLead(user, id)) // permission check every lead before deleting any
+        ok(await supabase.from('leads').delete().in('id', ids))
+      }),
+  })
+}
+
 export function useLeadActions(id: string) {
   const user = useUser()
   /** Bump the lead so "last activity" sorting stays honest. The set_leads_updated_at trigger supplies now(). */

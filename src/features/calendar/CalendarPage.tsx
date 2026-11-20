@@ -2,6 +2,7 @@ import { useState, type ChangeEvent } from 'react'
 import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { Button, Card, inlineInputCls, Loading, PageHeader, Segmented } from '../../components/ui'
 import { overlappingIds } from '../../lib/rules'
+import { db } from '../../lib/db'
 import type { Task, TaskKind } from '../../lib/types'
 import { useLeads } from '../leads/api'
 import { useProperties } from '../properties/api'
@@ -37,7 +38,7 @@ function Chip({ t, onClick, compact, clash }: { t: TaskRow; onClick: () => void;
         {time(t.due_at)}{!compact && t.ends_at && ` – ${time(t.ends_at)}`}
       </span>{' '}
       <span className={compact ? 'hidden md:inline' : ''}>{t.title}</span>
-      {!compact && t.lead_name && <span className="mt-0.5 block text-[11px] opacity-70">{t.lead_name}</span>}
+      {!compact && (t.lead_name || t.assignee_name !== '—') && <span className="mt-0.5 block text-[11px] opacity-70">{[t.lead_name, t.assignee_name !== '—' && t.assignee_name.split(' ')[0]].filter(Boolean).join(' · ')}</span>}
     </button>
   )
 }
@@ -48,12 +49,13 @@ export function CalendarPage() {
   const { data: leads = [] } = useLeads()
   const [view, setView] = useState<'week' | 'month'>('week')
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()))
-  const [filter, setFilter] = useState({ property: '', lead: '' })
+  const [filter, setFilter] = useState({ property: '', lead: '', rep: '' })
   const [editing, setEditing] = useState<Task | null>(null)
   const [creatingOn, setCreatingOn] = useState<Date | null>(null)
   if (!data) return <Loading />
 
-  const events = data.filter(t => t.status !== 'cancelled' && (!filter.property || t.property_id === filter.property) && (!filter.lead || t.lead_id === filter.lead))
+  const events = data.filter(t => t.status !== 'cancelled' && (!filter.property || t.property_id === filter.property) && (!filter.lead || t.lead_id === filter.lead) && (!filter.rep || t.assigned_to === filter.rep))
+  const owners = db.profiles.filter(p => data.some(t => t.assigned_to === p.id))
   const on = (d: Date) => events.filter(e => sameDay(new Date(e.due_at), d))
   const first = view === 'week' ? startOfWeek(anchor) : startOfWeek(new Date(anchor.getFullYear(), anchor.getMonth(), 1))
   const days = Array.from({ length: view === 'week' ? 7 : 42 }, (_, i) => addDays(first, i))
@@ -82,6 +84,12 @@ export function CalendarPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Segmented label="Calendar view" value={view} onChange={setView} items={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }]} />
+          {owners.length > 1 && (
+            <select value={filter.rep} onChange={set('rep')} className={`${inlineInputCls} max-w-44`} aria-label="Filter by assignee">
+              <option value="">Everyone</option>
+              {owners.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            </select>
+          )}
           <select value={filter.property} onChange={set('property')} className={`${inlineInputCls} max-w-48`} aria-label="Filter by property">
             <option value="">All properties</option>
             {properties.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
@@ -144,7 +152,7 @@ export function CalendarPage() {
       )}
 
       <TaskModal open={!!editing} onClose={() => setEditing(null)} task={editing} />
-      <TaskModal open={!!creatingOn} onClose={() => setCreatingOn(null)} defaults={{ kind: 'site_visit', due_at: creatingOn ? at11(creatingOn) : undefined, property_id: filter.property || null, lead_id: filter.lead || null }} />
+      <TaskModal open={!!creatingOn} onClose={() => setCreatingOn(null)} defaults={{ kind: 'site_visit', due_at: creatingOn ? at11(creatingOn) : undefined, property_id: filter.property || null, lead_id: filter.lead || null, ...(filter.rep && { assigned_to: filter.rep }) }} />
     </>
   )
 }

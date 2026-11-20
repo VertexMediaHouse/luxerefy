@@ -28,8 +28,10 @@ export function duration(ms: number) {
   return d ? `${d}d ${h}h` : h ? `${h}h ${m % 60}m` : `${m}m`
 }
 
-export const initials = (name: string) => name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()
+export const initials = (name: string) => name.trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 export const prettyPhone = (p: string) => (p.startsWith('+91') && p.length === 13 ? `+91 ${p.slice(3, 8)} ${p.slice(8)}` : p)
+/** WhatsApp chat link; phones are stored as +91XXXXXXXXXX. */
+export const waLink = (p: string) => `https://wa.me/${p.replace(/\D/g, '')}`
 export const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
 /** Value for <input type="datetime-local"> in local time. */

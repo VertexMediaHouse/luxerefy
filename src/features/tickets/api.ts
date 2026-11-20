@@ -50,9 +50,16 @@ export function useCreateTicket() {
           assigned_to: soleOwner(db)?.id ?? null,
         }).select().single()) as Ticket
       }),
-    onSuccess: () => {
+    onSuccess: async (t) => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
+      // Fire-and-forget: a failed email must not undo or block the saved ticket.
+      const { data } = await supabase.auth.getSession()
+      fetch('/api/admin/ticket-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
+        body: JSON.stringify({ id: t.id }),
+      }).then(r => { if (!r.ok) r.json().then(b => console.error('Ticket email failed:', b.error)) }, e => console.error('Ticket email failed:', e))
     },
   })
 }

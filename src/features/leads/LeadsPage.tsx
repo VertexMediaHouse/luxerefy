@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
+import { useBase } from '../../lib/session'
 import {
   Columns,
   Download,
@@ -8,6 +9,7 @@ import {
   List,
   Plus,
   SlidersHorizontal,
+  Trash2,
   Upload,
   UserCheck,
   UserPlus,
@@ -35,7 +37,7 @@ import { stagesOf } from '../../lib/stages'
 import { budget, prettyPhone, relative } from '../../lib/format'
 import type { LeadStatus } from '../../lib/types'
 import { db } from '../../lib/db'
-import { interestOf, useLeads } from './api'
+import { interestOf, useDeleteLeads, useLeads } from './api'
 import { LeadBoard } from './LeadBoard'
 import { NewLeadModal } from './LeadModals'
 import { ImportLeadsModal } from './ImportModal'
@@ -79,6 +81,7 @@ async function exportLeads(leads: ReturnType<typeof useLeads>['data']) {
 
 export function LeadsPage() {
   const nav = useNavigate()
+  const root = useBase()
   const { data: leads, refetch } = useLeads()
   const { data: pipes } = usePipelines()
   const { data: properties = [] } = useProperties()
@@ -88,6 +91,7 @@ export function LeadsPage() {
   const [setupOpen, setSetupOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const delMany = useDeleteLeads()
 
   // Saved board layouts live in localStorage
   const [views, setViews] = useState<SavedKanbanView[]>(() => {
@@ -324,14 +328,14 @@ export function LeadsPage() {
         )}
       </div>
 
-      {/* Floating Bulk Action Bar when leads are selected */}
+      {/* Floating bulk action bar: fixed at the bottom so selecting never shifts the table */}
       {selectedIds.size > 0 && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-900 px-4 py-3 text-white shadow-lg">
-          <div className="flex items-center gap-2 text-sm font-medium">
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-900 px-4 py-2.5 text-white shadow-2xl">
+          <div className="flex items-center gap-2 text-sm font-medium whitespace-nowrap">
             <span className="flex size-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold">
               {selectedIds.size}
             </span>
-            <span>lead(s) selected</span>
+            <span>selected</span>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -340,6 +344,23 @@ export function LeadsPage() {
               onClick={() => setModal('assign')}
             >
               <UserCheck className="size-4 text-blue-400" /> Assign To…
+            </Button>
+            <Button
+              variant="secondary"
+              className="bg-red-500/15 text-red-300 border-red-400/30 hover:bg-red-500/25"
+              disabled={delMany.isPending}
+              onClick={() => {
+                if (!confirm(`Delete ${selectedIds.size} lead(s)? This cannot be undone.`)) return
+                delMany.mutate(Array.from(selectedIds), {
+                  onSuccess: () => {
+                    setSelectedIds(new Set())
+                    refetch()
+                  },
+                  onError: e => alert(e instanceof Error ? e.message : 'Delete failed'),
+                })
+              }}
+            >
+              <Trash2 className="size-4" /> {delMany.isPending ? 'Deleting…' : 'Delete'}
             </Button>
             <button
               type="button"
@@ -404,7 +425,7 @@ export function LeadsPage() {
                   return (
                     <tr
                       key={l.id}
-                      onClick={() => nav(`/leads/${l.id}`)}
+                      onClick={() => nav(`${root}/leads/${l.id}`)}
                       className={`${T.row} ${isSelected ? 'bg-blue-50/50' : ''}`}
                     >
                       <td className="w-10 px-3 py-2.5" onClick={e => e.stopPropagation()}>
@@ -421,7 +442,7 @@ export function LeadsPage() {
                           <Avatar name={l.contact.name} size="sm" />
                           <div className="min-w-0">
                             <Link
-                              to={`/leads/${l.id}`}
+                              to={`${root}/leads/${l.id}`}
                               onClick={e => e.stopPropagation()}
                               className="font-semibold text-slate-900 hover:underline"
                             >

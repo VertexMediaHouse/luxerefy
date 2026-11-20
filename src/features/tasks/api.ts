@@ -6,7 +6,8 @@ import { useUser } from '../../lib/session'
 import { dateTime } from '../../lib/format'
 import type { Task } from '../../lib/types'
 
-export type TaskInput = Pick<Task, 'title' | 'kind' | 'lead_id' | 'property_id' | 'assigned_to' | 'due_at' | 'ends_at'>
+export type TaskInput = Pick<Task, 'title' | 'kind' | 'lead_id' | 'property_id' | 'assigned_to' | 'due_at' | 'ends_at'> &
+  Partial<Pick<Task, 'description' | 'priority' | 'status'>>
 
 const join = (t: Task) => {
   const lead = db.leads.find(l => l.id === t.lead_id)

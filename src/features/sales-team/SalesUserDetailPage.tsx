@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import {
   CalendarDays,
+  Check,
   Clock,
   Eye,
   Mail,
   Phone,
+  Plus,
   Users,
 } from 'lucide-react'
 import {
@@ -14,6 +16,7 @@ import {
   Button,
   Card,
   Empty,
+  ErrorText,
   Loading,
   PageHeader,
   StageChip,
@@ -27,6 +30,12 @@ import { db } from '../../lib/db'
 import { ActivityTimeline } from '../leads/ActivityTimeline'
 import { useSalesUserDetail } from './api'
 import { SalesUserModal } from './SalesUserModal'
+import { HealthBadges } from './SalesTeamPage'
+import { TaskModal } from '../tasks/TaskModal'
+import { isOverdue, useSetTaskStatus } from '../tasks/api'
+import { isOpen } from '../../lib/rules'
+import { SOURCE_LABEL, TASK_KIND_LABEL } from '../../lib/labels'
+import type { Task } from '../../lib/types'
 
 export function SalesUserDetailPage() {
   const { id = '' } = useParams()
@@ -34,8 +43,10 @@ export function SalesUserDetailPage() {
   const { startImpersonating } = useSession()
   const { data, isLoading } = useSalesUserDetail(id)
 
+  const setTaskStatus = useSetTaskStatus()
   const [tab, setTab] = useState<'leads' | 'tasks' | 'timeline'>('leads')
   const [editModalOpen, setEditModalOpen] = useState(false)
+  const [taskEdit, setTaskEdit] = useState<Task | 'new' | null>(null)
 
   if (isLoading || !data) return <Loading />
   const { user, leads, tasks, activities } = data
@@ -46,7 +57,7 @@ export function SalesUserDetailPage() {
         <Empty icon={Users}>
           Sales user not found.{' '}
           <Link to="/sales-team" className="font-semibold text-slate-900 underline">
-            Back to Sales Team
+            Back to Teams
           </Link>
         </Empty>
       </Card>
@@ -58,6 +69,11 @@ export function SalesUserDetailPage() {
   const openLeads = leads.filter(l => !l.status.endsWith('-won') && !l.status.endsWith('-lost'))
   const pendingTasks = tasks.filter(t => t.status === 'pending')
   const completedTasks = tasks.filter(t => t.status === 'done')
+  const overdueTasks = pendingTasks.filter(isOverdue)
+  // Pending first (soonest due), then the rest newest first.
+  const sortedTasks = [...pendingTasks.sort((a, b) => a.due_at.localeCompare(b.due_at)), ...tasks.filter(t => t.status !== 'pending').sort((a, b) => b.due_at.localeCompare(a.due_at))]
+  const nextTask = new Map<string, Task>()
+  for (const t of pendingTasks) if (t.lead_id && !nextTask.has(t.lead_id)) nextTask.set(t.lead_id, t)
 
   // Stages breakdown for the first pipeline
   const stages = stagesOf('pl-1')
@@ -78,11 +94,14 @@ export function SalesUserDetailPage() {
   return (
     <>
       <PageHeader
-        back={{ to: '/sales-team', label: 'Sales Team' }}
+        back={{ to: '/sales-team', label: 'Teams' }}
         title={user.full_name}
         subtitle={`${user.email} • Sales Representative`}
         actions={
           <div className="flex items-center gap-2">
+            <Button onClick={() => setTaskEdit('new')}>
+              <Plus className="size-4" /> Assign task
+            </Button>
             <Button variant="secondary" onClick={handleViewAs}>
               <Eye className="size-4 text-blue-600" /> View as this user
             </Button>
@@ -121,6 +140,7 @@ export function SalesUserDetailPage() {
               </div>
             </div>
           </div>
+          <HealthBadges id={user.id} />
         </div>
       </Card>
 
@@ -147,7 +167,9 @@ export function SalesUserDetailPage() {
         <Card className="p-4">
           <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Pending Tasks</div>
           <div className="mt-2 text-2xl font-bold text-amber-600">{pendingTasks.length}</div>
-          <div className="mt-1 text-xs text-slate-500">{completedTasks.length} completed tasks</div>
+          <div className={`mt-1 text-xs ${overdueTasks.length ? 'font-semibold text-red-600' : 'text-slate-500'}`}>
+            {overdueTasks.length ? `${overdueTasks.length} overdue · ` : ''}{completedTasks.length} completed
+          </div>
         </Card>
       </div>
 
@@ -195,7 +217,7 @@ export function SalesUserDetailPage() {
                       <th className={T.th}>Lead / Contact</th>
                       <th className={T.th}>Stage</th>
                       <th className={T.th}>Source</th>
-                      <th className={T.th}>City</th>
+                      <th className={T.th}>Next follow-up</th>
                       <th className={T.th}>Created</th>
                       <th className={`${T.th} text-right`}>Actions</th>
                     </tr>
@@ -213,10 +235,14 @@ export function SalesUserDetailPage() {
                             <StageChip status={l.status} />
                           </td>
                           <td className={T.td}>
-                            <span className="text-xs text-slate-600 capitalize">{l.source}</span>
+                            <span className="text-xs text-slate-600">{SOURCE_LABEL[l.source]}</span>
                           </td>
                           <td className={T.td}>
-                            <span className="text-xs text-slate-600">{l.city || '—'}</span>
+                            {(() => {
+                              const n = nextTask.get(l.id)
+                              if (n) return <span className={`text-xs ${isOverdue(n) ? 'font-semibold text-red-600' : 'text-slate-600'}`}>{isOverdue(n) ? 'Overdue · ' : ''}{relative(n.due_at)}</span>
+                              return isOpen(l) ? <Badge tone="amber">None booked</Badge> : <span className="text-xs text-slate-300">—</span>
+                            })()}
                           </td>
                           <td className={T.td}>
                             <span className="text-xs text-slate-400">{relative(l.created_at)}</span>
@@ -245,38 +271,37 @@ export function SalesUserDetailPage() {
                 <Empty icon={Clock}>No tasks found for this sales representative.</Empty>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {tasks.map(t => (
-                    <div key={t.id} className="flex items-center justify-between py-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`size-2 rounded-full ${
-                              t.status === 'done'
-                                ? 'bg-emerald-500'
-                                : Date.parse(t.due_at) < Date.now()
-                                  ? 'bg-red-500'
-                                  : 'bg-blue-500'
-                            }`}
-                          />
-                          <span className={`text-sm font-medium ${t.status === 'done' ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                            {t.title}
+                  {sortedTasks.map(t => {
+                    const done = t.status === 'done'
+                    const late = isOverdue(t)
+                    return (
+                      <div key={t.id} className="flex items-center gap-3 py-3">
+                        <button
+                          type="button"
+                          disabled={t.status === 'cancelled' || setTaskStatus.isPending}
+                          onClick={() => setTaskStatus.mutate({ id: t.id, status: done ? 'pending' : 'done' })}
+                          aria-label={done ? `Reopen "${t.title}"` : `Mark "${t.title}" done`}
+                          className={`flex size-5 shrink-0 items-center justify-center rounded-full ring-1 transition disabled:opacity-40 ${done ? 'bg-emerald-500 text-white ring-emerald-500' : 'text-transparent ring-slate-300 hover:bg-emerald-500 hover:text-white hover:ring-emerald-500'}`}
+                        >
+                          <Check className="size-3.5" />
+                        </button>
+                        <button type="button" onClick={() => setTaskEdit(t)} className="min-w-0 flex-1 text-left">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className={`text-sm font-medium ${done || t.status === 'cancelled' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{t.title}</span>
+                            <Badge tone="slate">{TASK_KIND_LABEL[t.kind] ?? t.kind}</Badge>
+                            {t.created_by && t.created_by !== user.id && <Badge tone="blue">Assigned by admin</Badge>}
                           </span>
-                          <span className="text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 uppercase font-mono text-[10px]">
-                            {t.kind}
+                          <span className={`mt-0.5 block text-xs ${late ? 'font-semibold text-red-600' : 'text-slate-400'}`}>
+                            {late ? 'Overdue · ' : ''}{dateTime(t.due_at)}
                           </span>
-                          {t.created_by && t.created_by !== user.id && (
-                            <span className="text-[10px] bg-blue-50 text-blue-700 font-medium px-1.5 py-0.5 rounded">
-                              Assigned by admin
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-400">Due: {dateTime(t.due_at)}</div>
+                        </button>
+                        <Badge tone={done ? 'green' : t.status === 'cancelled' ? 'slate' : late ? 'red' : 'amber'}>
+                          {done ? 'Completed' : t.status === 'cancelled' ? 'Cancelled' : late ? 'Overdue' : 'Pending'}
+                        </Badge>
                       </div>
-                      <Badge tone={t.status === 'done' ? 'green' : 'amber'}>
-                        {t.status === 'done' ? 'Completed' : 'Pending'}
-                      </Badge>
-                    </div>
-                  ))}
+                    )
+                  })}
+                  <ErrorText error={setTaskStatus.error} />
                 </div>
               )}
             </div>
@@ -304,6 +329,13 @@ export function SalesUserDetailPage() {
           )}
         </div>
       </Card>
+
+      <TaskModal
+        open={!!taskEdit}
+        onClose={() => setTaskEdit(null)}
+        task={taskEdit === 'new' ? null : taskEdit}
+        defaults={{ assigned_to: user.id, kind: 'call' }}
+      />
 
       {editModalOpen && (
         <SalesUserModal

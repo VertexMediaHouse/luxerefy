@@ -3,7 +3,7 @@ import { Navigate } from 'react-router'
 import { useSession } from '../../lib/session'
 import { Button, ErrorText, Field, inputCls, Card } from '../../components/ui'
 import { Brand } from '../../components/Layout'
-import { KeyRound } from 'lucide-react'
+import { Eye, EyeOff, KeyRound } from 'lucide-react'
 
 const HERO = 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&q=80&auto=format&fit=crop'
 
@@ -11,6 +11,12 @@ export function LoginPage() {
   const { user, blocked, signIn, signOut, mustChangePassword, changePassword } = useSession()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [show, setShow] = useState(false)
+  const eye = (
+    <button type="button" onClick={() => setShow(s => !s)} aria-label={show ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-700">
+      {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+    </button>
+  )
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changeError, setChangeError] = useState('')
@@ -76,24 +82,24 @@ export function LoginPage() {
 
               <form onSubmit={handlePasswordChange} className="space-y-4">
                 <Field label="New Password">
-                  <input
-                    type="password"
+                  <div className="relative"><input
+                    type={show ? 'text' : 'password'}
                     required
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     placeholder="At least 8 characters"
-                    className={inputCls}
-                  />
+                    className={inputCls + ' pr-10'}
+                  />{eye}</div>
                 </Field>
                 <Field label="Confirm New Password">
-                  <input
-                    type="password"
+                  <div className="relative"><input
+                    type={show ? 'text' : 'password'}
                     required
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
                     placeholder="Re-type password"
-                    className={inputCls}
-                  />
+                    className={inputCls + ' pr-10'}
+                  />{eye}</div>
                 </Field>
                 <ErrorText error={changeError} />
                 <Button type="submit" className="w-full" disabled={changing}>
@@ -118,7 +124,7 @@ export function LoginPage() {
                   <input name="email" type="email" required autoComplete="email" className={inputCls} placeholder="you@luxerefy.com" />
                 </Field>
                 <Field label="Password">
-                  <input name="password" type="password" required autoComplete="current-password" className={inputCls} placeholder="••••••••" />
+                  <div className="relative"><input name="password" type={show ? 'text' : 'password'} required autoComplete="current-password" className={inputCls + ' pr-10'} placeholder="••••••••" />{eye}</div>
                 </Field>
                 <ErrorText error={error || (blocked ? 'This account has no active CRM access. Contact your administrator.' : '')} />
                 <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>

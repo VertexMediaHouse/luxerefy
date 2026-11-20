@@ -5,7 +5,9 @@ import {
   CalendarPlus,
   Check,
   Clock,
+  Handshake,
   Mail,
+  MessageCircle,
   MessageSquare,
   Phone,
   PhoneCall,
@@ -33,11 +35,14 @@ import { useUser } from '../../lib/session'
 import { db, write, ok } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
 import { stagesOf, stageLabel } from '../../lib/stages'
-import { budget, dateTime, prettyPhone, relative } from '../../lib/format'
+import { budget, dateTime, prettyPhone, relative, waLink } from '../../lib/format'
 import { isLost, wonOf } from '../../lib/rules'
-import { SOURCE_LABEL } from '../../lib/labels'
+import { SOURCE_LABEL, TASK_KIND_LABEL } from '../../lib/labels'
+import type { Task } from '../../lib/types'
 import { ActivityTimeline } from '../leads/ActivityTimeline'
-import { SalesTaskModal } from './SalesTaskModal'
+import { useLeads } from '../leads/api'
+import { isOverdue, useSaveTask, useSetTaskStatus, useTasks } from '../tasks/api'
+import { QUICK_DUE, SalesTaskModal } from './SalesTaskModal'
 
 type LogMode = 'call' | 'text' | 'meeting' | 'note' | 'lost'
 
@@ -55,6 +60,13 @@ const LOST_REASONS = ['Budget mismatch', 'Bought elsewhere', 'Not responding', '
 export function SalesLeadDetailPage() {
   const { id = '' } = useParams()
   const user = useUser()
+  // Subscribe so stage changes, logs and task edits re-render this page.
+  useLeads()
+  useTasks()
+  const saveTask = useSaveTask()
+  const setTaskStatus = useSetTaskStatus()
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [followUpError, setFollowUpError] = useState('')
 
   const lead = db.leads.find(l => l.id === id)
   const contact = lead ? db.contacts.find(c => c.id === lead.contact_id) : null
@@ -92,6 +104,24 @@ export function SalesLeadDetailPage() {
   const leadActivities = db.lead_activities
     .filter(a => a.lead_id === lead.id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
+
+  const bookFollowUp = (due: Date) => {
+    setFollowUpError('')
+    saveTask.mutate(
+      {
+        input: {
+          title: `Follow up ${contact?.name ?? 'lead'}`,
+          kind: 'call',
+          lead_id: lead.id,
+          property_id: null,
+          assigned_to: user.id,
+          due_at: due.toISOString(),
+          ends_at: null,
+        },
+      },
+      { onError: e => setFollowUpError(e.message) },
+    )
+  }
 
   // Handle stage change
   const handleStageChange = async (newStatus: string, reason?: string) => {
@@ -197,18 +227,27 @@ export function SalesLeadDetailPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {contact?.phone && (
-              <a href={`tel:${contact.phone}`} className={buttonCls('primary')}>
-                <Phone className="size-4" /> Call Now
-              </a>
+              <>
+                <a href={`tel:${contact.phone}`} className={buttonCls('primary')}>
+                  <Phone className="size-4" /> Call
+                </a>
+                <a href={waLink(contact.phone)} target="_blank" rel="noreferrer" className={buttonCls('secondary')}>
+                  <MessageCircle className="size-4 text-emerald-600" /> WhatsApp
+                </a>
+              </>
             )}
+            <span className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
             <Button variant="secondary" onClick={() => setMode('call')}>
-              <PhoneCall className="size-4" /> Log Call
+              <PhoneCall className="size-4" /> Log call
             </Button>
             <Button variant="secondary" onClick={() => setMode('text')}>
-              <MessageSquare className="size-4" /> Log Text
+              <MessageSquare className="size-4" /> Log text
+            </Button>
+            <Button variant="secondary" onClick={() => setMode('meeting')}>
+              <Handshake className="size-4" /> Log meeting
             </Button>
             <Button variant="secondary" onClick={() => setTaskModalOpen(true)}>
-              <CalendarPlus className="size-4" /> Add Task / Follow-up
+              <CalendarPlus className="size-4" /> Follow-up
             </Button>
           </div>
         }
@@ -372,26 +411,54 @@ export function SalesLeadDetailPage() {
                 </Button>
               }
             />
-            <div className="divide-y divide-slate-100 p-2">
+            {pendingTasks.length === 0 && !isLost(lead) && (
+              <div className="flex flex-wrap items-center gap-2 border-b border-amber-100 bg-amber-50/60 px-4 py-3 text-xs">
+                <span className="font-medium text-amber-900">No next step booked. Call back:</span>
+                {QUICK_DUE.slice(1).map(q => (
+                  <button
+                    key={q.label}
+                    type="button"
+                    disabled={saveTask.isPending}
+                    onClick={() => bookFollowUp(q.date())}
+                    className="rounded-full bg-white px-2.5 py-1 font-medium text-slate-700 ring-1 ring-amber-200 hover:ring-amber-400"
+                  >
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <ErrorText error={followUpError} />
+            <div className="divide-y divide-slate-100">
               {pendingTasks.length === 0 ? (
-                <div className="p-4 text-center text-xs text-slate-400">
-                  No upcoming tasks or follow-ups booked. Click "Book Follow-up" to schedule the next call or visit.
-                </div>
+                <div className="p-4 text-center text-xs text-slate-400">No pending follow-ups.</div>
               ) : (
                 pendingTasks.map(t => {
-                  const overdue = Date.parse(t.due_at) < Date.now()
+                  const overdue = isOverdue(t)
                   return (
-                    <div key={t.id} className="flex items-center justify-between p-3 text-xs">
-                      <div className="flex items-center gap-2.5">
-                        <span
-                          className={`size-2 rounded-full ${overdue ? 'bg-red-500' : 'bg-blue-600'}`}
-                        />
-                        <div>
-                          <div className="font-semibold text-slate-900">{t.title}</div>
-                          <div className="text-slate-400">Due: {dateTime(t.due_at)}</div>
+                    <div
+                      key={t.id}
+                      onClick={() => setEditingTask(t)}
+                      className="flex cursor-pointer items-center gap-3 px-4 py-3 text-xs hover:bg-slate-50"
+                    >
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation()
+                          setTaskStatus.mutate({ id: t.id, status: 'done' })
+                        }}
+                        className="flex size-5 shrink-0 items-center justify-center rounded-md border border-slate-300 text-transparent hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-600"
+                        title="Mark done"
+                        aria-label={`Mark ${t.title} done`}
+                      >
+                        <Check className="size-3.5" />
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-semibold text-slate-900">{t.title}</div>
+                        <div className={overdue ? 'font-medium text-red-600' : 'text-slate-500'}>
+                          {TASK_KIND_LABEL[t.kind]} · {dateTime(t.due_at)}
                         </div>
                       </div>
-                      <Badge tone={overdue ? 'red' : 'blue'}>{overdue ? 'Overdue' : 'Pending'}</Badge>
+                      {overdue && <Badge tone="red">Overdue</Badge>}
                     </div>
                   )
                 })
@@ -478,10 +545,14 @@ export function SalesLeadDetailPage() {
       )}
 
       {/* Task Creation Modal */}
-      {taskModalOpen && (
+      {(taskModalOpen || editingTask) && (
         <SalesTaskModal
-          open={taskModalOpen}
-          onClose={() => setTaskModalOpen(false)}
+          open
+          onClose={() => {
+            setTaskModalOpen(false)
+            setEditingTask(null)
+          }}
+          task={editingTask}
           defaultLeadId={lead.id}
         />
       )}

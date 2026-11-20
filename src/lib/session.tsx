@@ -2,6 +2,7 @@
 // trigger creates on sign-up (the first account becomes the owner).
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation } from 'react-router'
 import { supabase } from './supabase'
 import { db, refresh } from './db'
 import { isManager } from './rules'
@@ -139,3 +140,6 @@ export const useSession = () => useContext(SessionCtx)!
 
 /** Only valid under <RequireAuth>. */
 export const useUser = () => useSession().user!
+
+/** Route prefix of the area the page is rendered in: '/sales' for the sales module, '' for admin. */
+export const useBase = () => (useLocation().pathname.startsWith('/sales') ? '/sales' : '')

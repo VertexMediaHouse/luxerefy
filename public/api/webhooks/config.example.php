@@ -5,4 +5,6 @@ return [
   'WEBHOOK_SHEETS_SECRET' => 'another-long-random-string',
   'SUPABASE_URL' => 'https://YOUR-PROJECT.supabase.co',
   'SUPABASE_SERVICE_ROLE_KEY' => 'sb_secret_...',
+  'RESEND_API_KEY' => 're_...',
+  // 'TICKET_EMAIL_TO' => 'someone@example.com',
 ];

@@ -11,7 +11,6 @@ import { PropertyFormPage } from './features/properties/PropertyFormPage'
 import { PublicPropertyPage } from './features/properties/PublicPropertyPage'
 import { SalesFormPage } from './features/leads/SalesFormPage'
 import { TicketsPage } from './features/tickets/TicketsPage'
-import { TeamPage } from './features/settings/TeamPage'
 import { BackupPage } from './features/settings/BackupPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { ContactsPage } from './features/contacts/ContactsPage'
@@ -27,10 +26,6 @@ import { SalesUserDetailPage } from './features/sales-team/SalesUserDetailPage'
 // Sales Person Module
 import { SalesLayout } from './features/sales/SalesLayout'
 import { SalesDashboardPage } from './features/sales/SalesDashboardPage'
-import { SalesLeadsPage } from './features/sales/SalesLeadsPage'
-import { SalesLeadDetailPage } from './features/sales/SalesLeadDetailPage'
-import { SalesCalendarPage } from './features/sales/SalesCalendarPage'
-import { SalesTasksPage } from './features/sales/SalesTasksPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, mustChangePassword } = useSession()
@@ -85,7 +80,6 @@ export function App() {
         <Route path="sales-team" element={<SalesTeamPage />} />
         <Route path="sales-team/:id" element={<SalesUserDetailPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="team" element={<TeamPage />} />
         <Route path="backup" element={<BackupPage />} />
       </Route>
 
@@ -101,10 +95,10 @@ export function App() {
         }
       >
         <Route index element={<SalesDashboardPage />} />
-        <Route path="leads" element={<SalesLeadsPage />} />
-        <Route path="leads/:id" element={<SalesLeadDetailPage />} />
-        <Route path="calendar" element={<SalesCalendarPage />} />
-        <Route path="tasks" element={<SalesTasksPage />} />
+        <Route path="leads" element={<LeadsPage />} />
+        <Route path="leads/:id" element={<LeadDetailPage />} />
+        <Route path="calendar" element={<CalendarPage />} />
+        <Route path="tasks" element={<TasksPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

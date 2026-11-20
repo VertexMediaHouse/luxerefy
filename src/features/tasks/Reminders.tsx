@@ -1,10 +1,12 @@
 import { Link } from 'react-router'
+import { useBase } from '../../lib/session'
 import { Bell } from 'lucide-react'
 import { dateTime } from '../../lib/format'
 import { isOverdue, useReminders } from './api'
 
 /** Header bell: native popover, light-dismiss for free. */
 export function Reminders() {
+  const root = useBase()
   const { data = [] } = useReminders()
   const hide = () => document.getElementById('reminders')?.hidePopover()
   return (
@@ -19,7 +21,7 @@ export function Reminders() {
           <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
             {data.map(t => (
               <li key={t.id}>
-                <Link to={t.lead_id ? `/leads/${t.lead_id}` : '/tasks'} onClick={hide} className="block px-4 py-3 hover:bg-slate-50">
+                <Link to={t.lead_id ? `${root}/leads/${t.lead_id}` : `${root}/tasks`} onClick={hide} className="block px-4 py-3 hover:bg-slate-50">
                   <span className="block truncate text-sm font-semibold text-slate-800">{t.title}</span>
                   <span className={`text-xs ${isOverdue(t) ? 'font-semibold text-red-600' : 'text-slate-500'}`}>{isOverdue(t) ? 'Overdue · ' : ''}{dateTime(t.due_at)}</span>
                 </Link>

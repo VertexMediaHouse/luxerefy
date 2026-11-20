@@ -1,11 +1,13 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Activity as ActivityIcon, Building2, CalendarPlus, Check, CheckCircle2, Clock, Hash, Home, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, Sparkles, StickyNote, Trash2, UserCheck, Users, Wallet, X, XCircle } from 'lucide-react'
+import { useBase } from '../../lib/session'
+import { Activity as ActivityIcon, Building2, CalendarPlus, Check, CheckCircle2, Clock, Hash, Home, Mail, MapPin, MessageCircle, MessageSquare, Phone, PhoneCall, Plus, Sparkles, StickyNote, Trash2, UserCheck, Users, Wallet, X, XCircle } from 'lucide-react'
 import { Avatar, Badge, Button, buttonCls, StageChip, StageIcon, Card, CardHeader, Empty, ErrorText, Field, HeaderLink, inlineInputCls, inputCls, Loading, Modal, PageHeader } from '../../components/ui'
 import { isLost, wonOf } from '../../lib/rules'
 import { LEAD_TYPES, LEAD_TYPE_LABEL, NEXT_ACTIONS, SOURCE_LABEL, TASK_KIND_LABEL, TIMED_KINDS } from '../../lib/labels'
 import { stagesOf } from '../../lib/stages'
-import { budget, dateTime, prettyPhone, relative, toLocalInput } from '../../lib/format'
+import { budget, dateTime, prettyPhone, relative, toLocalInput, waLink } from '../../lib/format'
+import { QUICK_DUE } from '../sales/SalesTaskModal'
 import type { ActivityType, LeadType, Task, TaskKind } from '../../lib/types'
 import { interestOf, useDeleteLead, useLead, useLeadActions } from './api'
 import { ActivityTimeline } from './ActivityTimeline'
@@ -34,6 +36,7 @@ function Row({ icon: I, label, children }: { icon: typeof Phone; label: string; 
 export function LeadDetailPage() {
   const { id = '' } = useParams()
   const nav = useNavigate()
+  const root = useBase()
   const { data: lead, isLoading } = useLead(id)
   const actions = useLeadActions(id)
   const del = useDeleteLead()
@@ -42,16 +45,17 @@ export function LeadDetailPage() {
   const [assignOpen, setAssignOpen] = useState(false)
 
   if (isLoading) return <Loading />
-  if (!lead) return <Card><Empty icon={Users}>This lead doesn't exist. <Link to="/leads" className="font-semibold text-slate-900 underline">Back to leads</Link></Empty></Card>
+  if (!lead) return <Card><Empty icon={Users}>This lead doesn't exist. <Link to={`${root}/leads`} className="font-semibold text-slate-900 underline">Back to leads</Link></Empty></Card>
   const stages = stagesOf(lead.pipeline_id)
 
   return (
     <>
       <PageHeader
-        back={{ to: '/leads', label: 'Leads' }}
+        back={{ to: `${root}/leads`, label: 'Leads' }}
         title={lead.contact.name}
         actions={<>
           <a href={`tel:${lead.contact.phone}`} className={buttonCls('primary')}><Phone className="size-4" /> Call</a>
+          <a href={waLink(lead.contact.phone)} target="_blank" rel="noreferrer" className={buttonCls('secondary')}><MessageCircle className="size-4 text-emerald-600" /> WhatsApp</a>
           <Button variant="secondary" onClick={() => setMode('call')}><PhoneCall className="size-4" /> Log call</Button>
           <Button variant="secondary" onClick={() => setMode('text')}><MessageSquare className="size-4" /> Log text</Button>
           <Button variant="secondary" onClick={() => setMode('note')}><StickyNote className="size-4" /> Note</Button>
@@ -59,7 +63,7 @@ export function LeadDetailPage() {
             variant="secondary"
             onClick={() => {
               if (confirm(`Are you sure you want to remove lead "${lead.contact.name}"?`)) {
-                del.mutate(lead.id, { onSuccess: () => nav('/leads') })
+                del.mutate(lead.id, { onSuccess: () => nav(`${root}/leads`) })
               }
             }}
             className="text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
@@ -107,8 +111,9 @@ export function LeadDetailPage() {
                 <StageChip status={lead.status} />
                 <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">{SOURCE_LABEL[lead.source]}</span>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="mt-4 grid grid-cols-3 gap-2">
                 <a href={`tel:${lead.contact.phone}`} className="flex flex-col items-center gap-1 rounded-lg py-2 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 hover:text-slate-900"><Phone className="size-4" /> Call</a>
+                <a href={waLink(lead.contact.phone)} target="_blank" rel="noreferrer" className="flex flex-col items-center gap-1 rounded-lg py-2 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 hover:text-slate-900"><MessageCircle className="size-4" /> WhatsApp</a>
                 {lead.contact.email
                   ? <a href={`mailto:${lead.contact.email}`} className="flex flex-col items-center gap-1 rounded-lg py-2 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 hover:text-slate-900"><Mail className="size-4" /> Email</a>
                   : <span className="flex flex-col items-center gap-1 rounded-lg py-2 text-xs font-medium text-slate-300 ring-1 ring-slate-200"><Mail className="size-4" /> No email</span>}
@@ -277,7 +282,25 @@ function FollowUpPanel({ lead, actions, onReschedule }: { lead: NonNullable<Retu
                 )
               })}
             </ul>
-          ) : <p className="text-sm text-slate-400">Nothing booked. Set the next step so this lead doesn't go cold.</p>}
+          ) : (
+            <div className="rounded-lg bg-amber-50 p-3 ring-1 ring-amber-200">
+              <p className="text-sm font-medium text-amber-900">No next step booked</p>
+              <p className="mt-0.5 text-xs text-amber-800">Book a call so this lead doesn't go cold:</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {QUICK_DUE.slice(1).map(q => (
+                  <button
+                    key={q.label}
+                    type="button"
+                    disabled={actions.followUp.isPending}
+                    onClick={() => actions.followUp.mutate({ title: `Call ${lead.contact.name}`, kind: 'call', due_at: q.date().toISOString(), ends_at: null })}
+                    className="rounded-md bg-white px-2 py-1 text-[11px] font-medium text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         <form onSubmit={book} className="space-y-3 bg-slate-50/60 p-4">

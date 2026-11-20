@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SessionProvider } from './lib/session'
+import { writeHooks } from './lib/db'
 import { App } from './App'
 import './index.css'
 
@@ -11,6 +12,7 @@ const queryClient: QueryClient = new QueryClient({
   mutationCache: new MutationCache({ onSuccess: () => queryClient.invalidateQueries() }),
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
 })
+writeHooks.after = () => void queryClient.invalidateQueries()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

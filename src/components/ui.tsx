@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from 'react'
+import { useEffect, useRef, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ChevronRight, Loader2, Plus, Search, X } from 'lucide-react'
 import type { Tone } from '../lib/labels'
@@ -113,48 +113,11 @@ export function StageChip({ status }: { status: LeadStatus }) {
 
 const AVATAR = ['bg-blue-100 text-blue-800', 'bg-ink text-white', 'bg-blue-600 text-white', 'bg-slate-200 text-slate-700', 'bg-blue-800 text-white', 'bg-sky-100 text-sky-800']
 
-const MOCK_AVATAR_PHOTOS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1534751516642-a171ed28a994?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1548142813-c348350df52b?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1542909168-82c3e7fdca5c?w=200&h=200&fit=crop&crop=faces&q=80',
-  'https://images.unsplash.com/photo-1517456793572-1d8efd6dc135?w=200&h=200&fit=crop&crop=faces&q=80',
-]
-
-export function getMockAvatarUrl(name: string): string {
-  const hash = [...name].reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) | 0, 0)
-  return MOCK_AVATAR_PHOTOS[Math.abs(hash) % MOCK_AVATAR_PHOTOS.length]
-}
-
-export function Avatar({
-  name,
-  src,
-  size = 'md',
-  initialsOnly = false,
-  className = '',
-}: {
+export function Avatar({ name, size = 'md', className = '' }: {
   name: string
-  src?: string | null
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
-  initialsOnly?: boolean
   className?: string
 }) {
-  const [hasError, setHasError] = useState(false)
   const color = AVATAR[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR.length]
   const dim = {
     xs: 'size-6 text-[10px]',
@@ -163,34 +126,13 @@ export function Avatar({
     lg: 'size-12 text-base',
     xl: 'size-16 text-xl',
   }[size]
-
-  const avatarUrl = src ?? (initialsOnly ? null : getMockAvatarUrl(name))
-
-  if (!avatarUrl || hasError) {
-    return (
-      <span
-        aria-hidden
-        className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold ring-2 ring-white select-none ${dim} ${color} ${className}`}
-      >
-        {initials(name)}
-      </span>
-    )
-  }
-
   return (
     <span
-      className={`relative inline-flex shrink-0 overflow-hidden rounded-full bg-slate-100 ring-2 ring-white shadow-soft ${dim} ${className}`}
       title={name}
-      aria-label={name}
+      aria-hidden
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold ring-2 ring-white select-none ${dim} ${color} ${className}`}
     >
-      <img
-        src={avatarUrl}
-        alt={name}
-        onError={() => setHasError(true)}
-        className="size-full object-cover"
-        loading="lazy"
-        referrerPolicy="no-referrer"
-      />
+      {initials(name) || '?'}
     </span>
   )
 }
