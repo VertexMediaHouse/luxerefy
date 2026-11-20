@@ -20,7 +20,10 @@ export const LEAD_CUTS = [
 ] as const
 export type LeadCut = (typeof LEAD_CUTS)[number]['value']
 
-export const ROLE_LABEL: Record<Role, string> = { owner: 'Owner', manager: 'Manager', agent: 'Agent' }
+export const ROLE_LABEL: Record<Role, string> = { owner: 'Owner', admin: 'Admin', manager: 'Manager', sales: 'Sales Rep' }
+
+export const TASK_PRIORITY_LABEL: Record<string, string> = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' }
+export const TASK_PRIORITY_TONE: Record<string, Tone> = { low: 'slate', normal: 'blue', high: 'amber', urgent: 'red' }
 
 export const PROPERTY_STATUS_LABEL: Record<PropertyStatus, string> = { available: 'Available', reserved: 'Reserved', sold: 'Sold', off_market: 'Off market' }
 export const PROPERTY_STATUS_TONE: Record<PropertyStatus, Tone> = { available: 'green', reserved: 'amber', sold: 'slate', off_market: 'slate' }

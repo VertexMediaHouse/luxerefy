@@ -20,9 +20,34 @@ import { CalendarPage } from './features/calendar/CalendarPage'
 import { TasksPage } from './features/tasks/TasksPage'
 import { GoalsPage } from './features/goals/GoalsPage'
 import { DocumentsPage } from './features/documents/DocumentsPage'
+import { isManager, isSales } from './lib/rules'
+import { SalesTeamPage } from './features/sales-team/SalesTeamPage'
+import { SalesUserDetailPage } from './features/sales-team/SalesUserDetailPage'
+
+// Sales Person Module
+import { SalesLayout } from './features/sales/SalesLayout'
+import { SalesDashboardPage } from './features/sales/SalesDashboardPage'
+import { SalesLeadsPage } from './features/sales/SalesLeadsPage'
+import { SalesLeadDetailPage } from './features/sales/SalesLeadDetailPage'
+import { SalesCalendarPage } from './features/sales/SalesCalendarPage'
+import { SalesTasksPage } from './features/sales/SalesTasksPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
-  return useSession().user ? children : <Navigate to="/login" replace />
+  const { user, mustChangePassword } = useSession()
+  // LoginPage shows the change-password form; the database refuses data until then anyway.
+  return user && !mustChangePassword ? children : <Navigate to="/login" replace />
+}
+
+/** Admin area: decided by who is really signed in, so a manager can still get back while impersonating. */
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { actualUser } = useSession()
+  return actualUser && isManager(actualUser) ? children : <Navigate to="/sales" replace />
+}
+
+/** Sales area: a sales user, or a manager impersonating one. */
+function RequireSales({ children }: { children: ReactNode }) {
+  const { user } = useSession()
+  return user && isSales(user) ? children : <Navigate to="/" replace />
 }
 
 export function App() {
@@ -31,7 +56,17 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/p/:slug" element={<PublicPropertyPage />} />
       <Route path="/sales-form" element={<SalesFormPage />} />
-      <Route element={<RequireAuth><Layout /></RequireAuth>}>
+
+      {/* Admin Protected Area */}
+      <Route
+        element={
+          <RequireAuth>
+            <RequireAdmin>
+              <Layout />
+            </RequireAdmin>
+          </RequireAuth>
+        }
+      >
         <Route index element={<DashboardPage />} />
         <Route path="leads" element={<LeadsPage />} />
         <Route path="leads/:id" element={<LeadDetailPage />} />
@@ -45,13 +80,33 @@ export function App() {
         <Route path="goals" element={<GoalsPage />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="tickets" element={<TicketsPage />} />
-        {/* The board is a view of Leads now; the old links keep working. */}
         <Route path="pipeline" element={<Navigate to="/leads?view=board" replace />} />
         <Route path="pipelines" element={<Navigate to="/leads?view=board&setup=1" replace />} />
+        <Route path="sales-team" element={<SalesTeamPage />} />
+        <Route path="sales-team/:id" element={<SalesUserDetailPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="backup" element={<BackupPage />} />
       </Route>
+
+      {/* Sales Person Module Protected Area */}
+      <Route
+        path="/sales"
+        element={
+          <RequireAuth>
+            <RequireSales>
+              <SalesLayout />
+            </RequireSales>
+          </RequireAuth>
+        }
+      >
+        <Route index element={<SalesDashboardPage />} />
+        <Route path="leads" element={<SalesLeadsPage />} />
+        <Route path="leads/:id" element={<SalesLeadDetailPage />} />
+        <Route path="calendar" element={<SalesCalendarPage />} />
+        <Route path="tasks" element={<SalesTasksPage />} />
+      </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

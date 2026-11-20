@@ -20,6 +20,7 @@ const ALIASES = {
   budget_max: ['budgetmax', 'maxbudget', 'budgetto', 'pricemax', 'maxprice'],
   source: ['leadsource', 'source', 'channel', 'medium', 'via'],
   notes: ['notes', 'note', 'message', 'remarks', 'remark', 'comments', 'comment'],
+  assigned_to: ['assignedto', 'assignee', 'salesrep', 'salesperson', 'rep', 'assigned', 'agent', 'owner'],
 } as const
 
 export type Field = keyof typeof ALIASES
@@ -101,6 +102,8 @@ export function parseRows(rows: SheetRow[], pipeline_id: string): Parsed[] {
     if (map.budget_min) min = money(get(r, 'budget_min'))
     if (map.budget_max) max = money(get(r, 'budget_max'))
 
+    const rawAssigned = get(r, 'assigned_to')
+
     return {
       row, name: name || 'Unknown', phone, error: null,
       input: {
@@ -108,6 +111,7 @@ export function parseRows(rows: SheetRow[], pipeline_id: string): Parsed[] {
         email: get(r, 'email') || null, city: get(r, 'city') || null,
         property_interest: get(r, 'property_interest') || null,
         budget_min: min, budget_max: max, message: get(r, 'notes') || null,
+        assigned_to: rawAssigned || null,
       },
     }
   })

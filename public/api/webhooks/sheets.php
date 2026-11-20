@@ -36,6 +36,23 @@ $phone = $pick('phone', 'mobile', 'phonenumber', 'mobilenumber', 'contact', 'con
 if ($phone === null) out(422, ['error' => 'Missing phone']);
 $email = $pick('email', 'emailaddress', 'emailid');
 
+// leads.source is a check-constrained enum: anything else makes capture_leads reject the row.
+// A landing-page sheet usually has no source column at all, so default to 'website'.
+const SOURCES = ['99acres', 'social_media', 'website', 'property_page', 'print_ad', 'jbn', 'referral', 'walk_in', 'sales_form', 'other'];
+$rawSource = $pick('source', 'cp', 'channelpartner', 'partner');
+$source = 'website';
+if ($rawSource !== null) {
+  $s = preg_replace('/[^a-z0-9]+/', '_', strtolower($rawSource));
+  if (in_array($s, SOURCES, true)) $source = $s;
+  elseif ($s === 'walkin') $source = 'walk_in';
+  else $source = 'referral'; // a named channel partner; kept verbatim in referral_detail below
+}
+
+// "CTA / Source section" tells you which button on the page was used - keep it with the message.
+$cta = $pick('ctasourcesection', 'cta', 'sourcesection', 'section');
+$message = $pick('message', 'remarks', 'comments', 'notes', 'query');
+if ($cta !== null) $message = $message === null ? "Via: $cta" : "$message (via: $cta)";
+
 $ch = curl_init("$SB_URL/rest/v1/rpc/capture_leads");
 curl_setopt_array($ch, [
   CURLOPT_POST => true,
@@ -47,11 +64,14 @@ curl_setopt_array($ch, [
     'phone' => $phone,
     'email' => $email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null,
     // Channel partner / sheet name, so you can tell which CP sent the lead.
-    'source' => $pick('source', 'cp', 'channelpartner', 'partner') ?? 'google-sheet',
-    'property_interest' => $pick('property', 'project', 'propertyname', 'interest', 'configuration', 'unittype'),
+    'source' => $source,
+    'referral_detail' => $source === 'referral' ? $rawSource : null,
+    // "Residence" on the landing page is the unit asked for; "Interest" is investor vs end-user.
+    'property_interest' => $pick('residence', 'property', 'project', 'propertyname', 'configuration', 'unittype'),
+    'lead_type' => $pick('interest', 'leadtype', 'buyertype'),
     'city' => $pick('city', 'location'),
     'external_ref' => $pick('rowid', 'row', 'leadid', 'id'),
-    'message' => $pick('message', 'remarks', 'comments', 'notes', 'query'),
+    'message' => $message,
     'raw_payload' => $data,
   ]]]),
 ]);

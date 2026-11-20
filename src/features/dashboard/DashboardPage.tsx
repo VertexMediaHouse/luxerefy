@@ -1,8 +1,8 @@
 import { useState, type ComponentType, type PointerEvent } from 'react'
-import { Link } from 'react-router'
-import { Activity, ArrowDownRight, ArrowUpRight, Building2, CalendarCheck, CalendarClock, CheckSquare, LifeBuoy, Target, TrendingUp, Users } from 'lucide-react'
-import { Badge, Button, Card, CardHeader, Empty, HeaderLink, Loading, PageHeader, Segmented, inlineInputCls } from '../../components/ui'
-import { useUser } from '../../lib/session'
+import { Link, useNavigate } from 'react-router'
+import { Activity, ArrowDownRight, ArrowUpRight, Award, Building2, CalendarCheck, CalendarClock, CheckSquare, Eye, LifeBuoy, Target, TrendingUp, UserCheck, Users } from 'lucide-react'
+import { Avatar, Badge, Button, Card, CardHeader, Empty, HeaderLink, Loading, PageHeader, Segmented, inlineInputCls } from '../../components/ui'
+import { useSession, useUser } from '../../lib/session'
 import { CATEGORIES, CATEGORY_LABEL, GOAL_PERIOD_LABEL, LEAD_CUTS, SEGMENTS, SEGMENT_LABEL, TASK_KIND_LABEL, type LeadCut } from '../../lib/labels'
 import { inr, shortDate } from '../../lib/format'
 import type { PropertyCategory, PropertySegment } from '../../lib/types'
@@ -12,6 +12,8 @@ import { useGoals, periodLabel } from '../goals/api'
 import { GoalBar } from '../goals/GoalParts'
 import { useProperties } from '../properties/api'
 import { PropertyCard } from '../properties/PropertiesPage'
+import { useSalesUsers } from '../sales-team/api'
+import { db } from '../../lib/db'
 import { useDashboard } from './api'
 
 type Icon = ComponentType<{ className?: string }>
@@ -132,10 +134,13 @@ const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
 
 export function DashboardPage() {
   const user = useUser()
+  const nav = useNavigate()
+  const { startImpersonating } = useSession()
   const { data: d } = useDashboard()
   const { data: tasks } = useTasks()
   const { data: goals } = useGoals()
   const { data: properties = [] } = useProperties()
+  const { data: salesUsers = [] } = useSalesUsers()
   const today = new Date()
   const [cut, setCut] = useState<LeadCut>('')
   const [segment, setSegment] = useState<PropertySegment>('residential')
@@ -344,6 +349,114 @@ export function DashboardPage() {
         <CardHeader icon={TrendingUp} title="Lead inflow" subtitle={`New enquiries per day, ${cutLabel.toLowerCase()}`} action={<HeaderLink to="/leads">All leads</HeaderLink>} />
         <div className="pt-5"><InflowChart data={lead.daily} /></div>
       </Card>
+
+      {/* Sales Team Performance & Leaderboard */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader
+            icon={Award}
+            title="Sales Team Leaderboard"
+            subtitle="Won deals and conversion performance"
+            action={<HeaderLink to="/sales-team">Sales team</HeaderLink>}
+          />
+          <div className="divide-y divide-slate-100 p-2">
+            {salesUsers.filter(u => u.active).length === 0 ? (
+              <div className="p-4 text-center text-xs text-slate-400">No active sales representatives.</div>
+            ) : (
+              [...salesUsers]
+                .filter(u => u.active)
+                .sort((a, b) => b.won_deals - a.won_deals || b.conversion_rate - a.conversion_rate)
+                .map((u, rank) => (
+                  <div key={u.id} className="flex items-center justify-between p-3 text-xs hover:bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <span className={`size-5 rounded-full flex items-center justify-center font-bold text-[10px] ${
+                        rank === 0 ? 'bg-amber-100 text-amber-800' : rank === 1 ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {rank + 1}
+                      </span>
+                      <Avatar name={u.full_name} size="sm" />
+                      <div>
+                        <Link to={`/sales-team/${u.id}`} className="font-semibold text-slate-900 hover:underline">
+                          {u.full_name}
+                        </Link>
+                        <div className="text-[11px] text-slate-400">{u.assigned_leads_count} assigned leads</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="font-bold text-emerald-600">{u.won_deals} Won</div>
+                        <div className="text-[11px] text-slate-400">{u.conversion_rate}% rate</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          startImpersonating({
+                            id: u.id,
+                            full_name: u.full_name,
+                            email: u.email,
+                            phone: u.phone,
+                            role: 'sales',
+                            active: u.active,
+                          })
+                          nav('/sales')
+                        }}
+                        className="rounded p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                        title="View as sales rep"
+                      >
+                        <Eye className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader
+            icon={UserCheck}
+            title="Leads by Status per User"
+            subtitle="Active distribution across pipeline stages"
+            action={<HeaderLink to="/leads">All leads</HeaderLink>}
+          />
+          <div className="overflow-x-auto p-3">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 text-left text-slate-400">
+                  <th className="py-2 pr-2 font-medium">Rep</th>
+                  <th className="py-2 px-1 text-center font-medium">New</th>
+                  <th className="py-2 px-1 text-center font-medium">Visit</th>
+                  <th className="py-2 px-1 text-center font-medium">Meeting</th>
+                  <th className="py-2 px-1 text-center font-medium">Won</th>
+                  <th className="py-2 pl-2 text-right font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {salesUsers.filter(u => u.active).map(u => {
+                  const uLeads = db.leads.filter(l => l.assigned_to === u.id)
+                  const newCount = uLeads.filter(l => l.status.endsWith('-new')).length
+                  const visitCount = uLeads.filter(l => l.status.includes('visit')).length
+                  const meetingCount = uLeads.filter(l => l.status.includes('meeting')).length
+                  const wonCount = uLeads.filter(l => l.status.endsWith('-won')).length
+
+                  return (
+                    <tr key={u.id} className="hover:bg-slate-50">
+                      <td className="py-2 pr-2 font-semibold text-slate-800 truncate max-w-28">
+                        {u.full_name}
+                      </td>
+                      <td className="py-2 px-1 text-center text-slate-600">{newCount}</td>
+                      <td className="py-2 px-1 text-center text-blue-600 font-medium">{visitCount}</td>
+                      <td className="py-2 px-1 text-center text-purple-600 font-medium">{meetingCount}</td>
+                      <td className="py-2 px-1 text-center text-emerald-600 font-bold">{wonCount}</td>
+                      <td className="py-2 pl-2 text-right font-bold text-slate-900">{uLeads.length}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card tone="tint" className="flex flex-col">

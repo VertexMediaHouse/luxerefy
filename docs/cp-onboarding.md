@@ -24,8 +24,28 @@ pipeline. Without the tag the page behaves exactly as before.
 Give each CP their own copy of the sheet, so ownership can be transferred:
 
 1. Open the master sheet and use **File > Make a copy**, named for the CP.
-2. Keep row 1 as the header row. The webhook matches these columns loosely:
-   `Name`, `Phone`, `Email`, `City`, `Project`, `Source`, `Remarks`.
+2. Keep row 1 as the header row. The webhook matches these columns loosely
+   (header text is normalised, so spacing and case do not matter):
+
+   | Sheet column | CRM field |
+   |---|---|
+   | `Name` | contact name |
+   | `Phone` | contact phone (required; dedupes against open leads) |
+   | `Email` | contact email |
+   | `Residence` / `Configuration` / `Project` | `property_interest` |
+   | `Interest` | `lead_type` (investor / end-user) |
+   | `City` / `Location` | `city` |
+   | `CTA / Source section` | appended to the lead's message |
+   | `Source` | `source`; see below |
+   | `Remarks` / `Message` / `Notes` | message |
+   | `Row ID` | `external_ref` |
+
+   `Source` must be one of the CRM's own values (`99acres`, `social_media`,
+   `website`, `property_page`, `print_ad`, `jbn`, `referral`, `walk_in`,
+   `sales_form`, `other`). Any other text is taken as a channel partner name:
+   the lead is captured as `referral` with that name in `referral_detail`. No
+   `Source` column at all means `website`, which is right for a landing page.
+   Every column, mapped or not, is also stored whole in `leads.raw_payload`.
 3. In the copy: **Extensions > Apps Script**, paste `public/api/webhooks/sheets.gs`.
 4. **Project Settings > Script properties**: set `CRM_URL` to
    `https://<crm-host>/api/webhooks/sheets.php` and `CRM_SECRET` to the same

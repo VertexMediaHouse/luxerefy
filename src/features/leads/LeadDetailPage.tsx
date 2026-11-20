@@ -1,6 +1,6 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Activity as ActivityIcon, Building2, CalendarPlus, Check, CheckCircle2, Clock, Hash, Home, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, Sparkles, StickyNote, Trash2, Users, Wallet, X, XCircle } from 'lucide-react'
+import { Activity as ActivityIcon, Building2, CalendarPlus, Check, CheckCircle2, Clock, Hash, Home, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, Sparkles, StickyNote, Trash2, UserCheck, Users, Wallet, X, XCircle } from 'lucide-react'
 import { Avatar, Badge, Button, buttonCls, StageChip, StageIcon, Card, CardHeader, Empty, ErrorText, Field, HeaderLink, inlineInputCls, inputCls, Loading, Modal, PageHeader } from '../../components/ui'
 import { isLost, wonOf } from '../../lib/rules'
 import { LEAD_TYPES, LEAD_TYPE_LABEL, NEXT_ACTIONS, SOURCE_LABEL, TASK_KIND_LABEL, TIMED_KINDS } from '../../lib/labels'
@@ -12,6 +12,9 @@ import { ActivityTimeline } from './ActivityTimeline'
 import { DocumentsPanel } from '../documents/DocumentParts'
 import { useProperties } from '../properties/api'
 import { TaskModal } from '../tasks/TaskModal'
+import { LeadAssignmentModal } from './LeadAssignmentModal'
+import { db } from '../../lib/db'
+import { supabase } from '../../lib/supabase'
 
 type Mode = 'call' | 'note' | 'text' | 'lost'
 const TITLES: Record<Mode, string> = { call: 'Log a call', note: 'Add a note', text: 'Log a text', lost: 'Mark as lost' }
@@ -36,6 +39,7 @@ export function LeadDetailPage() {
   const del = useDeleteLead()
   const [mode, setMode] = useState<Mode | null>(null)
   const [rescheduling, setRescheduling] = useState<Task | null>(null)
+  const [assignOpen, setAssignOpen] = useState(false)
 
   if (isLoading) return <Loading />
   if (!lead) return <Card><Empty icon={Users}>This lead doesn't exist. <Link to="/leads" className="font-semibold text-slate-900 underline">Back to leads</Link></Empty></Card>
@@ -164,6 +168,18 @@ export function LeadDetailPage() {
                 <Row icon={MapPin} label="City">{lead.city ?? '—'}</Row>
                 {lead.source === 'referral' && <Row icon={Sparkles} label="Referred by">{lead.referral_detail ?? '—'}</Row>}
                 {lead.external_ref && <Row icon={Hash} label="99acres ref">{lead.external_ref}</Row>}
+                <Row icon={UserCheck} label="Assigned to">
+                  <div className="flex items-center justify-between">
+                    <span>{db.profiles.find(p => p.id === lead.assigned_to)?.full_name ?? 'Unassigned'}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAssignOpen(true)}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      {lead.assigned_to ? 'Reassign' : 'Assign'}
+                    </button>
+                  </div>
+                </Row>
                 <Row icon={Clock} label="Created"><span title={dateTime(lead.created_at)}>{relative(lead.created_at)}</span></Row>
                 {isLost(lead) && <Row icon={XCircle} label="Lost reason">{lead.lost_reason ?? '—'}</Row>}
               </dl>
@@ -171,6 +187,7 @@ export function LeadDetailPage() {
           </Card>
           <PropertiesPanel linked={lead.properties} onSave={ids => actions.setProperties.mutate(ids)} pending={actions.setProperties.isPending} error={actions.setProperties.error} />
           <DocumentsPanel leadId={lead.id} />
+          <AssignmentHistoryPanel leadId={lead.id} activities={lead.activities} />
         </div>
 
         <div className="space-y-4">
@@ -184,6 +201,13 @@ export function LeadDetailPage() {
       <Modal open={!!mode} onClose={() => setMode(null)} title={mode ? TITLES[mode] : ''}>
         {mode && <LogForm mode={mode} lostStatus={`${lead.pipeline_id}-lost`} actions={actions} onDone={() => setMode(null)} />}
       </Modal>
+      {assignOpen && (
+        <LeadAssignmentModal
+          open={assignOpen}
+          onClose={() => setAssignOpen(false)}
+          selectedLeadIds={[lead.id]}
+        />
+      )}
     </>
   )
 }
@@ -414,5 +438,60 @@ function LogForm({ mode, actions, lostStatus, onDone }: { mode: Mode; actions: R
         <Button type="submit" variant={mode === 'lost' ? 'danger' : 'primary'} disabled={m.isPending}>{mode === 'lost' ? 'Mark lost' : 'Save'}</Button>
       </div>
     </form>
+  )
+}
+
+function AssignmentHistoryPanel({ leadId, activities }: { leadId: string; activities: any[] }) {
+  const [history, setHistory] = useState<any[]>([])
+
+  useEffect(() => {
+    supabase
+      .from('lead_assignment_history')
+      .select('*')
+      .eq('lead_id', leadId)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) setHistory(data)
+      })
+  }, [leadId])
+
+  const assignmentActivities = activities.filter(a => a.type === 'assignment')
+  const hasHistory = history.length > 0 || assignmentActivities.length > 0
+
+  if (!hasHistory) return null
+
+  return (
+    <Card className="p-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
+        <UserCheck className="size-3.5 text-blue-600" /> Assignment History
+      </h3>
+      <div className="space-y-3">
+        {history.length > 0 ? (
+          history.map(h => {
+            const assignee = db.profiles.find(p => p.id === h.assigned_to)
+            const prev = db.profiles.find(p => p.id === h.assigned_from)
+            return (
+              <div key={h.id} className="text-xs border-l-2 border-blue-500 pl-2.5 py-0.5">
+                <div className="font-semibold text-slate-800">
+                  {assignee ? assignee.full_name : 'Unassigned'}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  Method: <span className="font-medium text-slate-700">{h.assignment_method || 'Manual'}</span>
+                  {prev && <span> (from {prev.full_name})</span>}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">{relative(h.created_at)}</div>
+              </div>
+            )
+          })
+        ) : (
+          assignmentActivities.map(a => (
+            <div key={a.id} className="text-xs border-l-2 border-blue-500 pl-2.5 py-0.5">
+              <div className="font-semibold text-slate-800">{a.body}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{relative(a.created_at)}</div>
+            </div>
+          ))
+        )}
+      </div>
+    </Card>
   )
 }

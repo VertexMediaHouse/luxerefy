@@ -76,6 +76,7 @@ export function SalesFormPage() {
         budget_min: budgetConfig?.min ?? null,
         budget_max: budgetConfig?.max ?? null,
         city: city.trim() || null,
+        locality: locality.trim() || null,
         notes: fullNotes,
         message: `Public form enquiry for ${headlineInterest}`,
         assigned_to: agentId || null,

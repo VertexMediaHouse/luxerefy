@@ -5,7 +5,9 @@ import type { ActivityType, Goal, GoalPeriod, Lead, LeadSource, LeadType, Profil
 import { SOURCE_LABEL } from './labels.ts'
 
 export const uid = () => crypto.randomUUID()
-export const isManager = (u: Pick<Profile, 'role'>) => u.role !== 'agent'
+export const isAdmin = (u: Pick<Profile, 'role'>) => u.role === 'owner' || u.role === 'admin'
+export const isManager = (u: Pick<Profile, 'role'>) => u.role === 'owner' || u.role === 'admin' || u.role === 'manager'
+export const isSales = (u: Pick<Profile, 'role'>) => u.role === 'sales'
 export const canSeeLead = (u: Profile, l: Pick<Lead, 'assigned_to'>) => isManager(u) || l.assigned_to === u.id
 
 // Every pipeline gets the same three reserved stages, so their ids are derivable from the

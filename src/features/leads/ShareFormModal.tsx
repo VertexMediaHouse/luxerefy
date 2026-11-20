@@ -1,236 +1,140 @@
 import { useState } from 'react'
-import { Check, Copy, ExternalLink, Link2, MessageSquare, Sparkles } from 'lucide-react'
-import { Button, Field, inputCls, Modal } from '../../components/ui'
-import { SOURCE_LABEL } from '../../lib/labels'
-import { useProfiles } from '../../lib/session'
-import type { LeadSource } from '../../lib/types'
-import { usePipelines } from '../pipeline/api'
-import { useProperties } from '../properties/api'
+import { Check, Copy, Download, ExternalLink, Link2, MessageSquare, QrCode, ShieldCheck, Sparkles, UserPlus, Zap } from 'lucide-react'
+import { Button, Modal } from '../../components/ui'
 
 type ShareFormModalProps = {
   open: boolean
   onClose: () => void
 }
 
-const PRESETS = [
-  { label: 'General Form', ref: '', source: 'sales_form' as LeadSource },
-  { label: 'Instagram Ad', ref: 'Instagram Campaign', source: 'social_media' as LeadSource },
-  { label: 'WhatsApp Share', ref: 'WhatsApp Broadcast', source: 'sales_form' as LeadSource },
-  { label: 'Channel Partner', ref: 'Channel Partner', source: 'referral' as LeadSource },
-  { label: 'Luxury Expo', ref: 'Property Expo 2026', source: 'walk_in' as LeadSource },
+const PERKS = [
+  { icon: Zap, title: 'Instant capture', text: 'Every submission lands in Leads in real time.' },
+  { icon: ShieldCheck, title: 'No duplicates', text: 'Repeat enquiries merge by phone number.' },
+  { icon: UserPlus, title: 'Auto-assigned', text: 'New leads go straight to the pipeline.' },
 ]
 
 export function ShareFormModal({ open, onClose }: ShareFormModalProps) {
-  const { data: properties = [] } = useProperties()
-  const { data: profiles = [] } = useProfiles()
-  const { data: pipelines = [] } = usePipelines()
-
-  const [refTag, setRefTag] = useState('')
-  const [source, setSource] = useState<LeadSource>('sales_form')
-  const [propertyId, setPropertyId] = useState<string>('')
-  const [agentId, setAgentId] = useState<string>('')
-  const [pipelineId, setPipelineId] = useState<string>('')
   const [copied, setCopied] = useState(false)
-
-  // Active properties only for the selector
-  const activeProperties = properties.filter(p => p.status !== 'sold')
-  const activeProfiles = profiles.filter(p => p.active)
-
-  // Construct dynamic URL
-  const params = new URLSearchParams()
-  if (refTag.trim()) params.set('ref', refTag.trim())
-  if (source && source !== 'sales_form') params.set('source', source)
-  if (propertyId) params.set('prop', propertyId)
-  if (agentId) params.set('agent', agentId)
-  if (pipelineId) params.set('pipe', pipelineId)
-
-  const queryString = params.toString()
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const dynamicUrl = `${origin}/sales-form${queryString ? `?${queryString}` : ''}`
+  const url = `${window.location.origin}/sales-form`
+  // ponytail: public QR image service, swap for a local QR lib if offline use matters
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=${encodeURIComponent(url)}`
 
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(dynamicUrl)
+      await navigator.clipboard.writeText(url)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      prompt('Copy this dynamic link:', dynamicUrl)
+      prompt('Copy this link:', url)
     }
   }
 
-  const shareWhatsApp = () => {
-    const text = `Hello! Please share your luxury property requirements with us here: ${dynamicUrl}`
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank')
+  const [qrCopied, setQrCopied] = useState<'' | 'ok' | 'fail'>('')
+  const copyQr = async () => {
+    try {
+      const blob = await (await fetch(qr)).blob()
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      setQrCopied('ok')
+    } catch {
+      setQrCopied('fail')
+    }
+    setTimeout(() => setQrCopied(''), 2000)
   }
 
-  const applyPreset = (preset: typeof PRESETS[number]) => {
-    setRefTag(preset.ref)
-    setSource(preset.source)
+  const shareWhatsApp = () => {
+    const text = `Hello! Please share your luxury property requirements with us here: ${url}`
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank')
   }
 
   return (
     <Modal open={open} onClose={onClose} title="Share Public Lead Form" wide>
-      <div className="space-y-6">
-        <div>
-          <p className="text-sm text-slate-500">
-            Generate a personalized, trackable public form link. Anyone with this link can submit their details,
-            and the enquiry will be captured directly into your CRM pipeline with full tracking attribution.
-          </p>
+      <div className="space-y-5">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-5 text-white shadow-lg">
+          <div className="pointer-events-none absolute -top-10 -right-10 size-40 rounded-full bg-white/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-12 -left-6 size-32 rounded-full bg-indigo-400/20 blur-2xl" />
 
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-medium text-slate-400">Quick presets:</span>
-            {PRESETS.map(p => (
-              <button
-                key={p.label}
-                type="button"
-                onClick={() => applyPreset(p)}
-                className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition ${
-                  refTag === p.ref && source === p.source
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Campaign / Referral Tag"
-            hint="Identifies which campaign, partner, or channel sent this lead"
-          >
-            <input
-              value={refTag}
-              onChange={e => setRefTag(e.target.value)}
-              className={inputCls}
-              placeholder="e.g. Instagram Ad, Broker Rohit, Spring Expo"
-            />
-          </Field>
-
-          <Field label="Lead Source" hint="How this lead will be tagged in the CRM">
-            <select
-              value={source}
-              onChange={e => setSource(e.target.value as LeadSource)}
-              className={inputCls}
-            >
-              {Object.entries(SOURCE_LABEL).map(([val, label]) => (
-                <option key={val} value={val}>{label}</option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Pre-selected Property (Optional)" hint="Featured at the top of the prospect's form">
-            <select
-              value={propertyId}
-              onChange={e => setPropertyId(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">Any property (Prospect chooses / specifies)</option>
-              {activeProperties.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.title} · {p.locality}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Auto-assign to Agent (Optional)" hint="Directs captured leads to a specific team member">
-            <select
-              value={agentId}
-              onChange={e => setAgentId(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">Default (Workspace Owner)</option>
-              {activeProfiles.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name} ({p.role})
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          {pipelines.length > 1 && (
-            <Field label="Target Pipeline (Optional)" className="sm:col-span-2">
-              <select
-                value={pipelineId}
-                onChange={e => setPipelineId(e.target.value)}
-                className={inputCls}
-              >
-                <option value="">Default pipeline ({pipelines[0]?.name})</option>
-                {pipelines.map(pipe => (
-                  <option key={pipe.id} value={pipe.id}>{pipe.name}</option>
-                ))}
-              </select>
-            </Field>
-          )}
-        </div>
-
-        {/* Dynamic Link Display Box */}
-        <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-900">
-              <Sparkles className="size-3.5 text-blue-600" />
-              <span>Generated Dynamic Link</span>
-            </div>
-            {refTag && (
-              <span className="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                Tracked: {refTag}
+          <div className="relative grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="min-w-0">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide uppercase">
+                <Sparkles className="size-3.5" /> Generated Dynamic Link
               </span>
-            )}
-          </div>
+              <h3 className="mt-2 text-lg font-bold tracking-tight">Collect enquiries from anywhere</h3>
+              <p className="mt-1 text-sm text-blue-100">
+                Send this link to prospects, post it on socials, or print the QR at site visits and expos.
+              </p>
 
-          <div className="mt-2.5 flex items-center gap-2">
-            <div className="flex flex-1 items-center gap-2 overflow-hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-800 shadow-sm">
-              <Link2 className="size-4 shrink-0 text-slate-400" />
-              <span className="truncate">{dynamicUrl}</span>
-            </div>
-            <Button
-              type="button"
-              onClick={copyLink}
-              className={`shrink-0 ${copied ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
-            >
-              {copied ? (
-                <>
-                  <Check className="size-4" /> Copied!
-                </>
-              ) : (
-                <>
-                  <Copy className="size-4" /> Copy Link
-                </>
-              )}
-            </Button>
-          </div>
+              <div className="mt-4 flex items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-white/95 px-3 py-2 font-mono text-xs text-slate-800 shadow-sm">
+                  <Link2 className="size-4 shrink-0 text-blue-600" />
+                  <span className="truncate">{url}</span>
+                </div>
+                <Button
+                  type="button"
+                  onClick={copyLink}
+                  className={`shrink-0 ${copied ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-amber-400 font-semibold text-slate-900 hover:bg-amber-300'}`}
+                >
+                  {copied ? <><Check className="size-4" /> Copied!</> : <><Copy className="size-4" /> Copy Link</>}
+                </Button>
+              </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-blue-100 pt-3">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                onClick={shareWhatsApp}
-                className="gap-1.5 text-xs text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-              >
-                <MessageSquare className="size-3.5 text-emerald-600" /> Share on WhatsApp
-              </Button>
-              <a
-                href={dynamicUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                <ExternalLink className="size-3.5 text-slate-500" /> Open Preview
-              </a>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={shareWhatsApp}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+                >
+                  <MessageSquare className="size-3.5" /> Share on WhatsApp
+                </button>
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/25 transition hover:bg-white/25"
+                >
+                  <ExternalLink className="size-3.5" /> Open Preview
+                </a>
+              </div>
             </div>
 
-            <p className="text-[11px] text-slate-500">
-              Submissions automatically deduplicate by phone number.
-            </p>
+            <div className="flex flex-col items-center gap-2">
+              <div className="rounded-xl bg-white p-2 shadow-md">
+                <img src={qr} alt="QR code for the lead form" className="size-32" />
+              </div>
+              <div className="flex items-center gap-3 text-[11px] font-medium text-blue-100">
+                <button type="button" onClick={copyQr} className="inline-flex items-center gap-1 hover:text-white">
+                  {qrCopied === 'ok' ? <><Check className="size-3.5" /> Copied!</>
+                    : qrCopied === 'fail' ? <>Copy failed</>
+                    : <><QrCode className="size-3.5" /> Copy QR</>}
+                </button>
+                <a
+                  href={qr}
+                  target="_blank"
+                  rel="noreferrer"
+                  download="luxerefy-lead-form-qr.png"
+                  className="inline-flex items-center gap-1 hover:text-white"
+                >
+                  <Download className="size-3" /> Download
+                </a>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>Done</Button>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {PERKS.map(({ icon: Icon, title, text }) => (
+            <div key={title} className="rounded-xl border border-slate-200 bg-white p-3.5">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <Icon className="size-4" />
+              </div>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{title}</p>
+              <p className="mt-0.5 text-xs text-slate-500">{text}</p>
+            </div>
+          ))}
         </div>
+
+        <p className="text-center text-[11px] text-slate-500">
+          Submissions automatically deduplicate by phone number.
+        </p>
       </div>
     </Modal>
   )

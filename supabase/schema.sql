@@ -1,20 +1,20 @@
--- Luxerefy CRM schema. Mirrors src/lib/types.ts table for table.
--- Run once in the Supabase SQL editor on an empty project. Safe to re-run: everything is "if not exists"
--- or "create or replace", except policies, which are dropped and re-created.
---
--- Ids are text (the app generates crypto.randomUUID() and stage ids like 'pl-1-new').
--- profiles.id is the Supabase Auth user id, so everything that points at a person is uuid.
+-- Luxerefy CRM & Sales Person Module Schema
+-- Run this in your Supabase Project's SQL Editor (Dashboard > SQL Editor).
+-- Safe to run on both brand-new and existing projects.
 
--- ───────────────────────── tables ─────────────────────────
+-- ───────────────────────── 1. CORE TABLES ─────────────────────────
 
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null default '',
   email text not null default '',
   phone text not null default '',
-  role text not null default 'agent' check (role in ('owner', 'manager', 'agent')),
+  role text not null default 'sales',
   active boolean not null default true
 );
+
+alter table profiles drop constraint if exists profiles_role_check;
+alter table profiles add constraint profiles_role_check check (role in ('owner', 'admin', 'manager', 'sales'));
 
 create table if not exists pipelines (
   id text primary key default gen_random_uuid()::text,
@@ -69,7 +69,7 @@ create table if not exists leads (
   contact_id text not null references contacts(id) on delete cascade,
   source text not null check (source in ('99acres', 'social_media', 'website', 'property_page', 'print_ad', 'jbn', 'referral', 'walk_in', 'sales_form', 'other')),
   pipeline_id text not null references pipelines(id),
-  status text not null, -- a stage id; no FK so a lead survives its stage being removed (see stages.ts)
+  status text not null,
   property_ids text[] not null default '{}',
   property_interest text,
   locality text,
@@ -83,11 +83,12 @@ create table if not exists leads (
   referral_detail text,
   notes text not null default '',
   lost_reason text,
-  raw_payload jsonb, -- untouched webhook body, for audit / re-parsing if a portal changes its format
+  raw_payload jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
--- One open lead per contact (open = stage id not ending in -won / -lost, same as isOpen in rules.ts).
+
+-- One open lead per contact
 create unique index if not exists leads_one_open_per_contact on leads(contact_id) where status !~ '-(won|lost)$';
 
 create table if not exists lead_activities (
@@ -100,6 +101,18 @@ create table if not exists lead_activities (
   created_at timestamptz not null default now()
 );
 create index if not exists lead_activities_lead on lead_activities(lead_id);
+
+-- Lead assignment audit table
+create table if not exists lead_assignment_history (
+  id uuid primary key default gen_random_uuid(),
+  lead_id text not null references leads(id) on delete cascade,
+  assigned_from uuid references profiles(id) on delete set null,
+  assigned_to uuid references profiles(id) on delete set null,
+  assigned_by uuid references profiles(id) on delete set null,
+  assignment_method text not null default 'manual',
+  created_at timestamptz not null default now()
+);
+create index if not exists lead_assignment_history_lead on lead_assignment_history(lead_id);
 
 create table if not exists tasks (
   id text primary key default gen_random_uuid()::text,
@@ -152,7 +165,7 @@ create table if not exists documents (
   name text not null,
   size bigint not null default 0,
   mime text not null default 'application/octet-stream',
-  storage_path text not null, -- key in the private 'documents' storage bucket
+  storage_path text not null,
   uploaded_by uuid references profiles(id) on delete set null,
   starred boolean not null default false,
   created_at timestamptz not null default now()
@@ -169,13 +182,7 @@ create table if not exists goals (
   unique (period, metric)
 );
 
--- ───────────────────── additive column migrations ─────────────────────
--- "create table if not exists" above skips the whole statement on a project that already has the
--- table, so a column added to this file later never reaches an existing database. Each column added
--- after the first deployment gets an "add column if not exists" line here instead.
-alter table goals add column if not exists manual numeric not null default 0;
-
--- Default board. The app needs at least one pipeline with these stage ids (see seed.ts / rules.ts entryOf).
+-- Default board and stages
 insert into pipelines (id, name, position) values ('pl-1', 'Sales pipeline', 0) on conflict do nothing;
 insert into stages (id, pipeline_id, label, tone, position, kind) values
   ('pl-1-new', 'pl-1', 'New Lead', 'slate', 0, 'entry'),
@@ -197,65 +204,47 @@ insert into doc_folders (id, name, parent_id, color, icon) values
   ('f-team', 'Team Resources', null, 'slate', 'users')
 on conflict do nothing;
 
--- Performance indexes for foreign keys & frequent query filters
+-- Performance indexes
 create index if not exists tasks_assigned_to on tasks(assigned_to);
 create index if not exists tasks_lead on tasks(lead_id);
 create index if not exists tasks_due_status on tasks(due_at, status);
-create index if not exists tickets_assigned_to on tickets(assigned_to);
-create index if not exists tickets_lead on tickets(lead_id);
 create index if not exists leads_assigned_to on leads(assigned_to);
 create index if not exists leads_pipeline_status on leads(pipeline_id, status);
-create index if not exists properties_is_public on properties(is_public) where is_public = true;
-create index if not exists properties_locality on properties(locality);
-create index if not exists documents_lead on documents(lead_id);
-create index if not exists documents_property on documents(property_id);
-create index if not exists contacts_created_by on contacts(created_by);
 
--- ───────────────────────── helpers ─────────────────────────
+-- ───────────────────────── 2. FUNCTIONS & TRIGGERS ─────────────────────────
 
--- Role of the signed-in user, null for anon or deactivated staff. Security definer so policies can call it
--- without recursing into profiles' own RLS.
 create or replace function my_role() returns text language sql stable security definer set search_path = public as $$
   select role from profiles where id = auth.uid() and active
 $$;
+
 create or replace function is_staff() returns boolean language sql stable as $$ select my_role() is not null $$;
 create or replace function is_manager() returns boolean language sql stable as $$ select my_role() in ('owner', 'manager') $$;
 
--- New Auth user -> profiles row. The very first account becomes the owner; everyone after starts as agent.
+-- Handle user creation in auth.users -> create profile automatically
+-- Never read the role from user_metadata: the client controls it at signUp. First account is the
+-- owner; anyone else starts as an inactive sales user until an admin activates them.
 create or replace function handle_new_user() returns trigger language plpgsql security definer set search_path = public as $$
+declare first_user boolean := not exists (select 1 from profiles);
 begin
-  insert into profiles (id, full_name, email, role)
-  values (new.id, coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)), coalesce(new.email, ''),
-          case when exists (select 1 from profiles) then 'agent' else 'owner' end);
+  insert into profiles (id, full_name, email, phone, role, active)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    coalesce(new.email, ''),
+    coalesce(new.raw_user_meta_data->>'phone', ''),
+    case when first_user then 'owner' else 'sales' end,
+    first_user
+  )
+  on conflict (id) do nothing;
   return new;
 end $$;
+
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute function handle_new_user();
 
--- Only the owner may change anyone's role or access (TeamPage). Staff can still edit their own name/phone.
-create or replace function guard_profile() returns trigger language plpgsql as $$
-begin
-  if (new.role is distinct from old.role or new.active is distinct from old.active) and my_role() is distinct from 'owner'
-     and auth.uid() is not null then
-    raise exception 'Only the owner can change roles.';
-  end if;
-  return new;
-end $$;
-drop trigger if exists guard_profile on profiles;
-create trigger guard_profile before update on profiles for each row execute function guard_profile();
+-- Assignment history/activity triggers live in migrations/20261121_sales_module_fixes.sql.
 
--- Agents only see their own tickets, so the number the browser picks can collide. Fix it up on insert.
-create or replace function ticket_number() returns trigger language plpgsql security definer set search_path = public as $$
-begin
-  if new.number is null or exists (select 1 from tickets where number = new.number and id <> new.id) then
-    new.number := coalesce((select max(number) from tickets), 0) + 1;
-  end if;
-  return new;
-end $$;
-drop trigger if exists ticket_number on tickets;
-create trigger ticket_number before insert on tickets for each row execute function ticket_number();
-
--- Port of normalizePhone in src/lib/rules.ts. Keep the two in sync: contacts dedupe on this value.
+-- Phone normalizer
 create or replace function normalize_phone(raw text) returns text language plpgsql immutable as $$
 declare s text := btrim(coalesce(raw, '')); d text := regexp_replace(s, '\D', '', 'g'); l text;
 begin
@@ -266,7 +255,6 @@ begin
   return case when l ~ '^[6-9]\d{9}$' then '+91' || l end;
 end $$;
 
--- Auto-normalize phone on contact insert / update
 create or replace function normalize_contact_phone() returns trigger language plpgsql as $$
 begin
   new.phone := coalesce(normalize_phone(new.phone), new.phone);
@@ -275,7 +263,7 @@ end $$;
 drop trigger if exists normalize_contact_phone_trg on contacts;
 create trigger normalize_contact_phone_trg before insert or update of phone on contacts for each row execute function normalize_contact_phone();
 
--- Automatic updated_at timestamp trigger
+-- Updated_at triggers
 create or replace function set_updated_at() returns trigger language plpgsql as $$
 begin
   new.updated_at := now();
@@ -288,87 +276,10 @@ create trigger set_leads_updated_at before update on leads for each row execute 
 drop trigger if exists set_goals_updated_at on goals;
 create trigger set_goals_updated_at before update on goals for each row execute function set_updated_at();
 
--- Port of captureLead in src/lib/rules.ts: the one entry point for every new enquiry
--- (app form, sheet import, public sales form, property page, 99acres webhook).
--- Dedupes by phone: an existing open lead gets an "enquired again" entry instead of a duplicate.
--- Security definer because anon (public forms) must not be able to read or write tables directly.
--- Takes an array of CaptureInput objects; returns one {id, created} or {error} per row, in order.
-create or replace function capture_leads(rows jsonb) returns jsonb language plpgsql security definer set search_path = public as $$
-declare
-  r jsonb; result jsonb := '[]'; actor uuid := auth.uid(); owner_id uuid; assignee uuid;
-  ph text; src text; via text; c_id text; c_name text; l_id text; pl text; due timestamptz; props text[];
-begin
-  if actor is not null and not is_staff() then raise exception 'Your account is not active.'; end if;
-  select id into owner_id from profiles where active order by (role = 'owner') desc limit 1;
-
-  for r in select * from jsonb_array_elements(rows) loop
-    begin
-      ph := normalize_phone(r->>'phone');
-      if ph is null then raise exception 'Enter a valid mobile number'; end if;
-      src := coalesce(nullif(r->>'source', ''), 'other');
-      via := case src when '99acres' then '99acres' when 'social_media' then 'Social media' when 'website' then 'Website'
-        when 'property_page' then 'Property page' when 'print_ad' then 'Print Ad' when 'jbn' then 'JBN' when 'referral' then 'Referral'
-        when 'walk_in' then 'Walk-in' when 'sales_form' then 'Sales form' else 'Other' end
-        || coalesce(': "' || nullif(btrim(r->>'message'), '') || '"', '');
-
-      select id, name into c_id, c_name from contacts where phone = ph;
-      if c_id is null then
-        insert into contacts (name, phone, email, kind, created_by)
-        values (coalesce(nullif(btrim(r->>'name'), ''), 'Unknown'), ph, nullif(btrim(r->>'email'), ''), 'lead', actor)
-        returning id, name into c_id, c_name;
-      end if;
-
-      select id into l_id from leads where contact_id = c_id and status !~ '-(won|lost)$' limit 1;
-      if l_id is not null then
-        update leads set updated_at = now() where id = l_id;
-        insert into lead_activities (lead_id, type, body, actor_id) values (l_id, 'enquiry', 'Enquired again via ' || via, actor);
-        result := result || jsonb_build_object('id', l_id, 'created', false);
-        continue;
-      end if;
-
-      select id into pl from pipelines where id = r->>'pipeline_id';
-      if pl is null then select id into pl from pipelines order by position limit 1; end if;
-      select id into assignee from profiles where active and id::text = r->>'assigned_to';
-      assignee := coalesce(assignee, owner_id);
-      select coalesce(array_agg(x), '{}') into props from jsonb_array_elements_text(
-        case when jsonb_typeof(r->'property_ids') = 'array' then r->'property_ids' else '[]' end) x where x <> '';
-
-      insert into leads (contact_id, source, pipeline_id, status, property_ids, property_interest, locality, project, lead_type,
-                         budget_min, budget_max, city, assigned_to, external_ref, referral_detail, notes, raw_payload)
-      values (c_id, src, pl, pl || '-new', props, nullif(r->>'property_interest', ''), nullif(r->>'locality', ''),
-              nullif(r->>'project', ''), nullif(r->>'lead_type', ''),
-              nullif(r->>'budget_min', '')::numeric, nullif(r->>'budget_max', '')::numeric, nullif(r->>'city', ''),
-              assignee, nullif(r->>'external_ref', ''),
-              case when src in ('referral', 'sales_form') then nullif(btrim(r->>'referral_detail'), '') end,
-              coalesce(btrim(r->>'notes'), ''), r->'raw_payload')
-      returning id into l_id;
-      insert into lead_activities (lead_id, type, body, actor_id) values (l_id, 'created', 'Lead captured from ' || via, actor);
-
-      -- Portal leads get a first call booked for 10 AM IST the next day so nothing sits untouched.
-      if src = '99acres' and assignee is not null then
-        due := (date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '1 day 10 hours') at time zone 'Asia/Kolkata';
-        insert into tasks (title, kind, lead_id, property_id, assigned_to, due_at)
-        values ('Call ' || c_name || ' (99acres)', 'call', l_id, props[1], assignee, due);
-        insert into lead_activities (lead_id, type, body, actor_id)
-        values (l_id, 'follow_up', 'Follow-up scheduled for ' || to_char(due at time zone 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI AM'), null);
-      end if;
-
-      result := result || jsonb_build_object('id', l_id, 'created', true);
-    exception when others then
-      result := result || jsonb_build_object('error', sqlerrm);
-    end;
-  end loop;
-  return result;
-end $$;
-grant execute on function capture_leads(jsonb) to anon, authenticated;
-
--- ───────────────────────── row level security ─────────────────────────
--- Mirrors the canSee* rules in src/lib/rules.ts and the feature api.ts files.
--- Policies on child tables use "exists (select ... from leads)", which runs under leads' own RLS,
--- so an agent automatically sees only the activities/tasks/docs of leads assigned to them.
+-- ───────────────────────── 3. ROW LEVEL SECURITY (RLS) ─────────────────────────
 
 do $$ declare t text; p record; begin
-  foreach t in array array['profiles','pipelines','stages','contacts','properties','leads','lead_activities','tasks','tickets','doc_folders','documents','goals'] loop
+  foreach t in array array['profiles','pipelines','stages','contacts','properties','leads','lead_activities','lead_assignment_history','tasks','tickets','doc_folders','documents','goals'] loop
     execute format('alter table %I enable row level security', t);
     for p in select policyname from pg_policies where schemaname = 'public' and tablename = t loop
       execute format('drop policy %I on %I', p.policyname, t);
@@ -376,80 +287,60 @@ do $$ declare t text; p record; begin
   end loop;
 end $$;
 
+-- Profiles: staff can view; admin can edit; users can edit self
 create policy read on profiles for select to authenticated using (is_staff());
--- Upserts check the insert policy even when the row exists, so profiles needs one.
-create policy add on profiles for insert to authenticated with check (id = auth.uid() or my_role() = 'owner');
-create policy edit on profiles for update to authenticated using (id = auth.uid() or my_role() = 'owner');
+create policy add on profiles for insert to authenticated with check (is_manager());
+create policy edit on profiles for update to authenticated using (id = auth.uid() or is_manager());
 
+-- Pipelines & Stages
 create policy read on pipelines for select to authenticated using (is_staff());
 create policy write on pipelines for all to authenticated using (is_manager()) with check (is_manager());
 create policy read on stages for select to authenticated using (is_staff());
 create policy write on stages for all to authenticated using (is_manager()) with check (is_manager());
 
--- Public property page and sales form read listed properties without signing in.
+-- Properties
 create policy read on properties for select to anon, authenticated using (is_public or is_staff());
 create policy add on properties for insert to authenticated with check (is_staff());
 create policy edit on properties for update to authenticated using (is_staff());
 create policy remove on properties for delete to authenticated using (is_manager());
 
+-- LEADS: CRITICAL SECURITY (Sales users only see and edit their own assigned leads)
 create policy see on leads for select to authenticated using (is_manager() or assigned_to = auth.uid());
 create policy add on leads for insert to authenticated with check (is_staff());
 create policy edit on leads for update to authenticated using (is_manager() or assigned_to = auth.uid());
-create policy remove on leads for delete to authenticated using (is_manager() or assigned_to = auth.uid());
+create policy remove on leads for delete to authenticated using (is_manager());
 
+-- Contacts: visible if manager or lead is assigned
 create policy see on contacts for select to authenticated
-  using (is_manager() or created_by = auth.uid() or exists (select 1 from leads l where l.contact_id = contacts.id));
+  using (is_manager() or created_by = auth.uid() or exists (select 1 from leads l where l.contact_id = contacts.id and (is_manager() or l.assigned_to = auth.uid())));
 create policy add on contacts for insert to authenticated with check (is_staff());
 create policy edit on contacts for update to authenticated
-  using (is_manager() or created_by = auth.uid() or exists (select 1 from leads l where l.contact_id = contacts.id));
+  using (is_manager() or created_by = auth.uid() or exists (select 1 from leads l where l.contact_id = contacts.id and (is_manager() or l.assigned_to = auth.uid())));
 create policy remove on contacts for delete to authenticated using (is_manager());
 
+-- Lead Activities: visible only if lead is accessible
 create policy own on lead_activities for all to authenticated
-  using (exists (select 1 from leads l where l.id = lead_id)) with check (exists (select 1 from leads l where l.id = lead_id));
+  using (is_manager() or exists (select 1 from leads l where l.id = lead_id and l.assigned_to = auth.uid()))
+  with check (is_manager() or exists (select 1 from leads l where l.id = lead_id and l.assigned_to = auth.uid()));
 
+-- Lead Assignment History
+create policy see_assignment_history on lead_assignment_history for select to authenticated using (is_staff());
+create policy add_assignment_history on lead_assignment_history for insert to authenticated with check (is_staff());
+
+-- TASKS: CRITICAL SECURITY (Sales users only access their own tasks)
 create policy own on tasks for all to authenticated
-  using (is_manager() or assigned_to = auth.uid()) with check (is_manager() or assigned_to = auth.uid());
+  using (is_manager() or assigned_to = auth.uid())
+  with check (is_manager() or assigned_to = auth.uid());
 
+-- Tickets, Documents, Goals
 create policy see on tickets for select to authenticated using (is_manager() or raised_by = auth.uid() or assigned_to = auth.uid());
 create policy add on tickets for insert to authenticated with check (is_staff() and (raised_by = auth.uid() or is_manager()));
 create policy edit on tickets for update to authenticated using (is_manager() or raised_by = auth.uid() or assigned_to = auth.uid());
-
 create policy staff on doc_folders for all to authenticated using (is_staff()) with check (is_staff());
-
--- Client paperwork follows the lead; property-only and general docs are visible to all staff.
 create policy see on documents for select to authenticated
-  using (is_staff() and (is_manager() or lead_id is null or exists (select 1 from leads l where l.id = lead_id)));
+  using (is_staff() and (is_manager() or lead_id is null or exists (select 1 from leads l where l.id = lead_id and (is_manager() or l.assigned_to = auth.uid()))));
 create policy add on documents for insert to authenticated with check (is_staff());
-create policy edit on documents for update to authenticated
-  using (is_staff() and (is_manager() or lead_id is null or exists (select 1 from leads l where l.id = lead_id)));
+create policy edit on documents for update to authenticated using (is_staff());
 create policy remove on documents for delete to authenticated using (is_manager() or uploaded_by = auth.uid());
-
 create policy read on goals for select to authenticated using (is_staff());
 create policy write on goals for all to authenticated using (is_staff()) with check (is_staff());
-
--- ───────────────────────── file storage ─────────────────────────
--- Private bucket. A file is readable only if its documents row is (that check runs under documents' RLS).
-
-insert into storage.buckets (id, name, public) values ('documents', 'documents', false) on conflict do nothing;
-drop policy if exists "crm docs read" on storage.objects;
-drop policy if exists "crm docs upload" on storage.objects;
-drop policy if exists "crm docs delete" on storage.objects;
-create policy "crm docs read" on storage.objects for select to authenticated
-  using (bucket_id = 'documents' and exists (select 1 from public.documents d where d.storage_path = objects.name));
-create policy "crm docs upload" on storage.objects for insert to authenticated
-  with check (bucket_id = 'documents' and public.is_staff());
-create policy "crm docs delete" on storage.objects for delete to authenticated
-  using (bucket_id = 'documents' and exists (select 1 from public.documents d where d.storage_path = objects.name
-         and (public.is_manager() or d.uploaded_by = auth.uid())));
-
--- Public bucket for property images and public marketing media
-insert into storage.buckets (id, name, public) values ('property-images', 'property-images', true) on conflict do nothing;
-drop policy if exists "crm property images read" on storage.objects;
-drop policy if exists "crm property images upload" on storage.objects;
-drop policy if exists "crm property images delete" on storage.objects;
-create policy "crm property images read" on storage.objects for select
-  using (bucket_id = 'property-images');
-create policy "crm property images upload" on storage.objects for insert to authenticated
-  with check (bucket_id = 'property-images' and public.is_staff());
-create policy "crm property images delete" on storage.objects for delete to authenticated
-  using (bucket_id = 'property-images' and public.is_manager());

@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { CheckCircle2, Info } from 'lucide-react'
+import { Info } from 'lucide-react'
 import { Button, buttonCls, ErrorText, Field, inputCls, Modal } from '../../components/ui'
 import { LEAD_TYPES, LEAD_TYPE_LABEL, SOURCE_LABEL } from '../../lib/labels'
 import type { Lead, LeadSource, LeadType } from '../../lib/types'
 import { useProperties } from '../properties/api'
-import { useCreateLead, useSimulate99acres } from './api'
+import { useCreateLead } from './api'
 
 type ModalProps = { open: boolean; onClose: () => void }
 
@@ -110,56 +110,3 @@ function NewLeadForm({ onClose }: { onClose: () => void }) {
   )
 }
 
-const NAMES = ['Aarav Shah', 'Diya Patel', 'Kabir Mehta', 'Riya Desai', 'Vihaan Joshi', 'Anaya Trivedi', 'Reyansh Parikh']
-const WANTS = ['4 BHK Sky Villa at Shela', 'penthouse in Ambli', '5 BHK bungalow in Thaltej', '4 BHK on Sindhu Bhavan Road']
-const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)]
-const randomMobile = () => `9${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`
-const sampleSms = () => {
-  const m = randomMobile()
-  return `99acres: Name: ${pick(NAMES)}, Mob: +91 ${m.slice(0, 5)} ${m.slice(5)}. I'm interested in your ${pick(WANTS)}. Please call back.`
-}
-const sampleJson = () => JSON.stringify({ lead_id: `99A-${Math.floor(Math.random() * 90000) + 10000}`, name: pick(NAMES), mobile: randomMobile(), email: '', project: pick(WANTS), city: 'Ahmedabad' }, null, 2)
-
-export function SimulateWebhookModal({ open, onClose }: ModalProps) {
-  return (
-    <Modal open={open} onClose={onClose} title="Simulate a 99acres webhook" wide>
-      <Simulate99acres onClose={onClose} />
-    </Modal>
-  )
-}
-
-function Simulate99acres({ onClose }: { onClose: () => void }) {
-  const [text, setText] = useState(sampleSms)
-  const sim = useSimulate99acres()
-  const r = sim.data
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-600">
-        In production 99acres SMS or email leads are forwarded to <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">POST /functions/v1/99acres-webhook?key=•••</code>.
-        Paste or edit a payload below to run the same capture logic: parse, dedupe by phone and book tomorrow's first call.
-      </p>
-      <div className="flex gap-2 text-xs">
-        <Button variant="secondary" className="py-1 text-xs" onClick={() => { setText(sampleSms()); sim.reset() }}>Sample SMS</Button>
-        <Button variant="secondary" className="py-1 text-xs" onClick={() => { setText(sampleJson()); sim.reset() }}>Sample JSON</Button>
-      </div>
-      <textarea value={text} onChange={e => setText(e.target.value)} rows={6} className={`${inputCls} font-mono text-xs`} aria-label="Webhook payload" />
-      <ErrorText error={sim.error} />
-      {r && (
-        <div className="flex gap-3 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900 ring-1 ring-emerald-600/20">
-          <CheckCircle2 className="size-5 shrink-0" />
-          <div>
-            {r.created
-              ? <p><b>New lead created.</b> A call is booked for tomorrow 10 AM.</p>
-              : <p><b>Duplicate number</b>: no new lead. The enquiry was logged on the existing lead.</p>}
-            <Link to={`/leads/${r.lead.id}`} onClick={onClose} className="mt-1 inline-block font-bold text-emerald-800 underline">Open lead →</Link>
-          </div>
-        </div>
-      )}
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={onClose}>Close</Button>
-        <Button onClick={() => sim.mutate(text)} disabled={sim.isPending}>Send to webhook</Button>
-      </div>
-    </div>
-  )
-}

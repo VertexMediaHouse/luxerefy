@@ -29,8 +29,9 @@ const GROUPS: { group: string; items: Item[] }[] = [
     { to: '/documents', label: 'Documents', icon: FileText },
   ] },
   { group: 'Admin', items: [
+    { to: '/sales-team', label: 'Sales team', icon: UserCog },
     { to: '/settings', label: 'Settings', icon: Settings },
-    { to: '/team', label: 'Team & roles', icon: UserCog },
+    { to: '/team', label: 'Team & roles', icon: Users },
     { to: '/backup', label: 'Backups', icon: DatabaseBackup },
   ] },
 ]

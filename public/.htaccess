@@ -1,0 +1,15 @@
+# SPA fallback: deep links like /sales-form and /p/:slug serve index.html.
+# Real files and folders (assets, /api/*.php) are served as-is.
+RewriteEngine On
+RewriteBase /
+
+# Apache drops the Authorization header for PHP under CGI/FastCGI; the admin API needs it.
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# The app calls /api/admin/sales-users[/<id>]; serve it from the PHP file.
+RewriteRule ^api/admin/sales-users/?([0-9a-f-]*)$ api/admin/sales-users.php?id=$1 [L,QSA]
+
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+RewriteRule ^ index.html [L]

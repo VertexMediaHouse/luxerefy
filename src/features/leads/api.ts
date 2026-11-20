@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { captureRemote, db, ok, respond, write } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
-import { canSeeLead, findClash, isLost, isOpen, isWon, parse99acres, uid, type CaptureInput } from '../../lib/rules'
+import { canSeeLead, findClash, isLost, isOpen, isWon, uid, type CaptureInput } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { stage, stageLabel } from '../../lib/stages'
 import { dateTime } from '../../lib/format'
@@ -134,19 +134,6 @@ export function useImportLeads() {
         else merged++
       })
       return { created, merged, failed }
-    },
-  })
-}
-
-/** Runs a pasted payload through the same capture the real webhook (public/api/webhooks/99acres.php) uses. */
-export function useSimulate99acres() {
-  return useMutation({
-    mutationFn: (raw: string) => {
-      let payload: unknown = raw
-      try { payload = JSON.parse(raw) } catch { /* not JSON → treat as SMS text */ }
-      const input = parse99acres(payload)
-      if (!input) throw new Error('No phone number found in that message — the webhook would reject it (400).')
-      return capture(input)
     },
   })
 }

@@ -25,11 +25,11 @@ export function useSaveGoal() {
       write(async () => {
         if (!Number.isFinite(target) || target < 0) throw new Error('Enter a target of zero or more')
         if (target === 0) {
-          ok(await supabase.from('goals').delete().eq('period', period).eq('metric', metric))
+          ok(await supabase.from('goals').delete().eq('period', period).eq('metric', metric).is('user_id', null))
           return null
         }
-        // (period, metric) is unique, so this is one upsert rather than a read then a write.
-        return ok(await supabase.from('goals').upsert({ period, metric, target }, { onConflict: 'period,metric' })
+        // (period, metric, user_id) is unique NULLS NOT DISTINCT; these are team targets (user_id null).
+        return ok(await supabase.from('goals').upsert({ period, metric, target, user_id: null }, { onConflict: 'period,metric,user_id' })
           .select().single()) as Goal
       }),
     onSuccess: () => {
@@ -48,7 +48,7 @@ export function useAddGoalManual() {
     mutationFn: ({ period, metric, delta }: { period: GoalPeriod; metric: GoalMetric; delta: number }) =>
       write(async () => {
         if (!Number.isFinite(delta) || delta === 0) throw new Error('Enter an amount to add')
-        const existing = db.goals.find(g => g.period === period && g.metric === metric)
+        const existing = db.goals.find(g => g.period === period && g.metric === metric && !g.user_id)
         if (!existing) throw new Error('Set a target first')
         // ponytail: read-modify-write. Two people adding at the same moment lose one entry;
         // move it into a SQL `manual = manual + delta` function if that ever matters.
