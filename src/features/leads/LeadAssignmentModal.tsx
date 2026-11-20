@@ -115,7 +115,7 @@ export function LeadAssignmentModal({
   // every target is an active sales user, then moves all leads or none.
   const executeAssignment = async (pairs: { lead_id: string; assigned_to: string | null }[], method: AssignmentMethod) => {
     ok(await supabase.rpc('assign_leads', { p_assignments: pairs, p_method: method }))
-    await refresh().catch(() => {})
+    await refresh(['leads', 'lead_activities']).catch(() => {})
   }
   const toOne = (leadIds: string[], rep: string | null) => leadIds.map(lead_id => ({ lead_id, assigned_to: rep }))
 

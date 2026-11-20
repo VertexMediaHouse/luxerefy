@@ -14,21 +14,28 @@ export const db: Tables = {
 const TABLES = Object.keys(db) as (keyof Tables)[]
 
 /** Pull every readable row into the mirror. Throws on a real failure (bad key, project down). */
-export async function refresh() {
-  const results = await Promise.all(TABLES.map(selectAll))
-  results.forEach((rows, i) => { (db[TABLES[i]] as unknown[]) = rows })
+export async function refresh(tables: readonly (keyof Tables)[] = TABLES) {
+  const results = await Promise.all(tables.map(selectAll))
+  results.forEach((rows, i) => { (db[tables[i]] as unknown[]) = rows })
 }
+
+/** Tables named in supabase.from() since the last take(), so a write re-pulls only what it touched. */
+const touched = new Set<keyof Tables>()
+const from = supabase.from.bind(supabase)
+supabase.from = ((t: keyof Tables) => (touched.add(t), from(t))) as typeof supabase.from
+const take = () => { const t = [...touched].filter(x => TABLES.includes(x)); touched.clear(); return t }
 
 /** PostgREST caps a response at 1000 rows, so read in pages. Without this, backups silently drop rows. */
 const PAGE = 1000
 async function selectAll(t: keyof Tables) {
-  const rows: unknown[] = []
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase.from(t).select('*').order('id').range(from, from + PAGE - 1)
-    if (error) throw new Error(`${t}: ${error.message}`)
-    rows.push(...data)
-    if (data.length < PAGE) return rows
-  }
+  // First page carries the total, so the remaining pages are fetched in parallel, not one by one.
+  const page = (i: number, count?: 'exact') => from(t).select('*', count ? { count } : undefined).order('id').range(i * PAGE, i * PAGE + PAGE - 1)
+  const first = await page(0, 'exact')
+  if (first.error) throw new Error(`${t}: ${first.error.message}`)
+  const n = Math.ceil((first.count ?? 0) / PAGE)
+  const rest = await Promise.all(Array.from({ length: Math.max(0, n - 1) }, (_, i) => page(i + 1)))
+  for (const r of rest) if (r.error) throw new Error(`${t}: ${r.error.message}`)
+  return [...first.data, ...rest.flatMap(r => r.data ?? [])]
 }
 
 /** Bootstrap / re-bootstrap the mirror. Kept as two names because session.tsx and BackupPage use both. */
@@ -43,8 +50,10 @@ export const writeHooks = { after: () => {} }
 
 /** Run a real write against Supabase, then refresh the mirror. Throwing inside fn rejects like a failed RLS check. */
 export async function write<T>(fn: () => T | Promise<T>): Promise<T> {
+  take()
   const out = await fn()
-  await refresh()
+  const t = take()
+  await refresh(t.length ? t : TABLES)
   writeHooks.after()
   return out
 }
@@ -65,7 +74,7 @@ export async function captureRemote(rows: object[]): Promise<CaptureResult[]> {
   const { data, error } = await supabase.rpc('capture_leads', { rows })
   if (error) throw new Error(error.message)
   // Anon has no select grant, so only a signed-in caller can see the new rows.
-  await refresh().catch(() => {})
+  await refresh(['leads', 'contacts', 'lead_activities', 'tasks']).catch(() => {})
   return (data ?? []) as CaptureResult[]
 }
 

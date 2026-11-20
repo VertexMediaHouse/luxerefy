@@ -54,7 +54,7 @@ function useAdminMutation<T>(fn: (arg: T) => Promise<unknown>) {
   return useMutation({
     mutationFn: async (arg: T) => {
       const out = await fn(arg)
-      await refresh().catch(() => {})
+      await refresh(['profiles', 'leads', 'tasks']).catch(() => {})
       return out
     },
     onSuccess: () => {
