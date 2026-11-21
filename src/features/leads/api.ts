@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { captureRemote, db, ok, refresh, respond, write, writeHooks } from '../../lib/db'
+import { captureRemote, db, ok, respond, write, writeHooks } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
 import { canSeeLead, findClash, isLost, isOpen, isWon, uid, type CaptureInput } from '../../lib/rules'
 import { useUser } from '../../lib/session'
@@ -123,22 +123,34 @@ async function applyStatus(user: Profile, id: string, status: LeadStatus, reason
   // the index is still the thing that actually enforces it.
   if (!isOpen(l) && isOpen({ status }) && db.leads.some(o => o.id !== id && o.contact_id === l.contact_id && isOpen(o)))
     throw new Error('This contact already has another open lead.')
-  await logRemote(id, 'status_change', `Stage changed from ${stageLabel(l.status)} to ${stageLabel(status)}${reason ? ` — ${reason}` : ''}`, user.id)
-  ok(await supabase.from('leads').update({
-    status, pipeline_id: stage(status)?.pipeline_id ?? l.pipeline_id,
-    lost_reason: isLost({ status }) ? reason ?? null : null,
-  }).eq('id', id))
+
+  const now = new Date().toISOString()
   const contact = db.contacts.find(c => c.id === l.contact_id)
-  if (isWon({ status }) && contact?.kind === 'lead')
-    ok(await supabase.from('contacts').update({ kind: 'client' }).eq('id', contact.id))
+
+  const ops: PromiseLike<unknown>[] = [
+    logRemote(id, 'status_change', `Stage changed from ${stageLabel(l.status)} to ${stageLabel(status)}${reason ? ` — ${reason}` : ''}`, user.id),
+    supabase.from('leads').update({
+      status, pipeline_id: stage(status)?.pipeline_id ?? l.pipeline_id,
+      lost_reason: isLost({ status }) ? reason ?? null : null,
+      updated_at: now,
+    }).eq('id', id).then(ok),
+  ]
+
+  if (isWon({ status }) && contact?.kind === 'lead') {
+    ops.push(supabase.from('contacts').update({ kind: 'client' }).eq('id', contact.id).then(ok))
+  }
+
+  await Promise.all(ops)
 }
 
 /**
  * Stage change, optimistic: the mirror moves the lead at once, the save runs behind it, and a
  * failed save puts the lead back. Waiting for the round trip made the board feel stuck.
  */
+let movesInFlight = 0
 async function moveLead(user: Profile, id: string, status: LeadStatus, reason?: string) {
   const l = ownLead(user, id)
+  movesInFlight++
   const before = { status: l.status, pipeline_id: l.pipeline_id, lost_reason: l.lost_reason, updated_at: l.updated_at }
   const save = applyStatus(user, id, status, reason)
   save.catch(() => {}) // handled below; stops an unhandled-rejection warning before the await
@@ -146,6 +158,10 @@ async function moveLead(user: Profile, id: string, status: LeadStatus, reason?: 
     status, pipeline_id: stage(status)?.pipeline_id ?? l.pipeline_id,
     lost_reason: isLost({ status }) ? reason ?? null : null, updated_at: new Date().toISOString(),
   })
+  if (isWon({ status })) {
+    const contact = db.contacts.find(c => c.id === l.contact_id)
+    if (contact && contact.kind === 'lead') contact.kind = 'client'
+  }
   writeHooks.after()
   try {
     await save
@@ -153,9 +169,9 @@ async function moveLead(user: Profile, id: string, status: LeadStatus, reason?: 
     Object.assign(l, before)
     writeHooks.after()
     throw e
+  } finally {
+    movesInFlight--
   }
-  // Timeline entry and the client flag on a win come from the server; pull them without blocking.
-  void refresh(['leads', 'lead_activities', 'contacts']).then(writeHooks.after, () => {})
 }
 
 /** Board drag-and-drop. Separate from useLeadActions because the card is not the open lead. */

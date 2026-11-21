@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { useBase } from '../../lib/session'
+import { useBase, useSession } from '../../lib/session'
 import {
   Columns,
   Download,
@@ -31,7 +31,7 @@ import {
   T,
   Tabs,
 } from '../../components/ui'
-import { isOpen } from '../../lib/rules'
+import { isManager, isOpen } from '../../lib/rules'
 import { SOURCE_LABEL } from '../../lib/labels'
 import { stagesOf } from '../../lib/stages'
 import { budget, prettyPhone, relative } from '../../lib/format'
@@ -82,6 +82,8 @@ async function exportLeads(leads: ReturnType<typeof useLeads>['data']) {
 export function LeadsPage() {
   const nav = useNavigate()
   const root = useBase()
+  const { user } = useSession()
+  const isSalesMode = root === '/sales' || (user ? !isManager(user) : false)
   const { data: leads, refetch } = useLeads()
   const { data: pipes } = usePipelines()
   const { data: properties = [] } = useProperties()
@@ -208,18 +210,26 @@ export function LeadsPage() {
         <Button variant="secondary" onClick={() => setShareOpen(true)}>
           <ExternalLink className="size-4 text-slate-500" /> Share form
         </Button>
-        <Button variant="secondary" onClick={() => setSetupOpen(true)}>
-          <SlidersHorizontal className="size-4 text-slate-500" /> Customise pipeline
-        </Button>
-        <Button variant="secondary" onClick={() => setModal('import')}>
-          <Upload className="size-4 text-slate-500" /> Import
-        </Button>
-        <Button variant="secondary" onClick={() => void exportLeads(leads)}>
-          <Download className="size-4 text-slate-500" /> Export
-        </Button>
-        <Button variant="secondary" onClick={() => setModal('assign')}>
-          <UserCheck className="size-4 text-blue-600" /> Assign & Distribute
-        </Button>
+        {!isSalesMode && (
+          <Button variant="secondary" onClick={() => setSetupOpen(true)}>
+            <SlidersHorizontal className="size-4 text-slate-500" /> Customise pipeline
+          </Button>
+        )}
+        {!isSalesMode && (
+          <Button variant="secondary" onClick={() => setModal('import')}>
+            <Upload className="size-4 text-slate-500" /> Import
+          </Button>
+        )}
+        {!isSalesMode && (
+          <Button variant="secondary" onClick={() => void exportLeads(leads)}>
+            <Download className="size-4 text-slate-500" /> Export
+          </Button>
+        )}
+        {!isSalesMode && (
+          <Button variant="secondary" onClick={() => setModal('assign')}>
+            <UserCheck className="size-4 text-blue-600" /> Assign & Distribute
+          </Button>
+        )}
         <Button onClick={() => setModal('new')}>
           <Plus className="size-4" /> New lead
         </Button>
@@ -282,20 +292,22 @@ export function LeadsPage() {
             </option>
           ))}
         </select>
-        <select
-          value={assigned}
-          onChange={e => set('assigned', e.target.value)}
-          className={`${inlineInputCls} max-w-52`}
-          aria-label="Filter by assigned rep"
-        >
-          <option value="">All assignees</option>
-          <option value="unassigned">Unassigned only</option>
-          {salesUsers.map(u => (
-            <option key={u.id} value={u.id}>
-              Assigned: {u.full_name}
-            </option>
-          ))}
-        </select>
+        {!isSalesMode && (
+          <select
+            value={assigned}
+            onChange={e => set('assigned', e.target.value)}
+            className={`${inlineInputCls} max-w-52`}
+            aria-label="Filter by assigned rep"
+          >
+            <option value="">All assignees</option>
+            <option value="unassigned">Unassigned only</option>
+            {salesUsers.map(u => (
+              <option key={u.id} value={u.id}>
+                Assigned: {u.full_name}
+              </option>
+            ))}
+          </select>
+        )}
 
         {view === 'board' && views.length > 0 && (
           <div className="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 shadow-soft ring-1 ring-slate-200/80">
@@ -329,7 +341,7 @@ export function LeadsPage() {
       </div>
 
       {/* Floating bulk action bar: fixed at the bottom so selecting never shifts the table */}
-      {selectedIds.size > 0 && (
+      {!isSalesMode && selectedIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-900 px-4 py-2.5 text-white shadow-2xl">
           <div className="flex items-center gap-2 text-sm font-medium whitespace-nowrap">
             <span className="flex size-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold">
@@ -400,15 +412,17 @@ export function LeadsPage() {
             <table className={T.table}>
               <thead className={T.head}>
                 <tr>
-                  <th className="w-10 px-3 py-2.5">
-                    <input
-                      type="checkbox"
-                      checked={rows.length > 0 && selectedIds.size === rows.length}
-                      onChange={toggleSelectAll}
-                      className="size-4 rounded accent-blue-600 cursor-pointer"
-                      aria-label="Select all leads"
-                    />
-                  </th>
+                  {!isSalesMode && (
+                    <th className="w-10 px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={rows.length > 0 && selectedIds.size === rows.length}
+                        onChange={toggleSelectAll}
+                        className="size-4 rounded accent-blue-600 cursor-pointer"
+                        aria-label="Select all leads"
+                      />
+                    </th>
+                  )}
                   <th className={T.th}>Lead</th>
                   <th className={`${T.th} hidden md:table-cell`}>Interest</th>
                   <th className={`${T.th} hidden md:table-cell`}>Budget</th>
@@ -428,15 +442,17 @@ export function LeadsPage() {
                       onClick={() => nav(`${root}/leads/${l.id}`)}
                       className={`${T.row} ${isSelected ? 'bg-blue-50/50' : ''}`}
                     >
-                      <td className="w-10 px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelect(l.id)}
-                          className="size-4 rounded accent-blue-600 cursor-pointer"
-                          aria-label={`Select ${l.contact.name}`}
-                        />
-                      </td>
+                      {!isSalesMode && (
+                        <td className="w-10 px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(l.id)}
+                            className="size-4 rounded accent-blue-600 cursor-pointer"
+                            aria-label={`Select ${l.contact.name}`}
+                          />
+                        </td>
+                      )}
                       <td className={T.td}>
                         <div className="flex items-center gap-2.5">
                           <Avatar name={l.contact.name} size="sm" />

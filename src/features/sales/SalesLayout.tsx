@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import {
   CalendarDays,
   CheckSquare,
@@ -20,12 +20,88 @@ import { db } from '../../lib/db'
 import { isOverdue, useTasks } from '../tasks/api'
 import { useLeads } from '../leads/api'
 
+/**
+ * Sales capture guard: no select/copy/right-click/drag/print/save, and the page blurs
+ * only while a screenshot key is pressed.
+ * ponytail: a browser cannot truly block OS screenshots or a phone camera; this deters,
+ * and the per-user watermark makes any leaked capture traceable.
+ */
+function useCaptureGuard() {
+  useEffect(() => {
+    const html = document.documentElement
+    let timer: number | undefined
+    const show = () => { clearTimeout(timer); if (document.hasFocus() && !document.hidden) html.dataset.guard = 'on' }
+    const hide = (ms = 0) => {
+      clearTimeout(timer)
+      html.dataset.guard = 'hidden'
+      if (ms) timer = window.setTimeout(show, ms)
+    }
+    const block = (e: Event) => e.preventDefault()
+    const onKeyDown = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase()
+      const mod = e.ctrlKey || e.metaKey
+      // Win key (Win+Shift+S) / Cmd key (Cmd+Shift+3/4/5): blank before the OS grabs the frame.
+      if (e.key === 'Meta' || e.key === 'OS') return hide(1500)
+      if (k === 'printscreen') return hide(1500)
+      if (k === 'f12' || (mod && ['p', 's', 'u'].includes(k)) || (mod && e.shiftKey && ['i', 'j', 'c', 's'].includes(k))) e.preventDefault()
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Meta' || e.key === 'OS') return show()
+      // Windows only reports PrintScreen on keyup, after the capture: wipe the clipboard copy.
+      if (e.key.toLowerCase() === 'printscreen') {
+        hide(1500)
+        navigator.clipboard?.writeText('').catch(() => {})
+      }
+    }
+
+    const onDragStart = (e: DragEvent) => {
+      const target = e.target as HTMLElement | null
+      // Allow dragging if target or ancestor is draggable (Kanban cards)
+      if (target?.closest?.('[draggable="true"]')) return
+      e.preventDefault()
+    }
+
+    html.dataset.guard = 'on'
+    const events: [EventTarget, string, EventListener][] = [
+      [document, 'copy', block],
+      [document, 'cut', block],
+      [document, 'contextmenu', block],
+      [document, 'dragstart', onDragStart as EventListener],
+      [window, 'keydown', onKeyDown as EventListener],
+      [window, 'keyup', onKeyUp as EventListener],
+      [window, 'focus', show],
+    ]
+    for (const [t, n, f] of events) t.addEventListener(n, f, true)
+    return () => {
+      clearTimeout(timer)
+      for (const [t, n, f] of events) t.removeEventListener(n, f, true)
+      delete html.dataset.guard
+    }
+  }, [])
+}
+
+const xml = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)
+
+/** Faint tiled name + email so a photo of the screen still names who took it. */
+function Watermark({ text }: { text: string }) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="340" height="180"><text x="20" y="110" transform="rotate(-24 170 90)" fill="rgba(15,23,42,0.07)" font-family="sans-serif" font-size="14">${xml(text)}</text></svg>`
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 z-[100]"
+      style={{ backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")` }}
+    />
+  )
+}
+
 export function SalesLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
   const user = useUser()
   const { signOut, isImpersonating, stopImpersonating } = useSession()
   const nav = useNavigate()
+  const onLeads = useLocation().pathname.startsWith('/sales/leads')
   const warm = useEyeSafe()
+  useCaptureGuard()
   // Subscribe so the sidebar counts follow every write.
   useLeads()
   useTasks()
@@ -59,6 +135,7 @@ export function SalesLayout() {
 
   return (
     <div className="flex h-dvh flex-col bg-canvas">
+      {onLeads && <Watermark text={`${user.full_name} · ${user.email} · ${new Date().toLocaleDateString()}`} />}
       {/* Impersonation Banner for Admins */}
       {isImpersonating && (
         <div className="z-50 flex items-center justify-between bg-blue-600 px-4 py-2 text-xs font-medium text-white shadow-md">

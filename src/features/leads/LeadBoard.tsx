@@ -1,5 +1,5 @@
-import { memo, useState, type DragEvent } from 'react'
-import { Link } from 'react-router'
+import { memo, useState, useRef, useEffect, type DragEvent } from 'react'
+import { Link, useNavigate } from 'react-router'
 import { useBase } from '../../lib/session'
 import { Building2, CalendarCheck, Clock, FileText, MessageSquare, Phone, Plus, Trash2, Users } from 'lucide-react'
 import { Avatar, StageIcon, TONE_HEX } from '../../components/ui'
@@ -48,22 +48,43 @@ function sameCard(a: { l: LeadRow; dragging: boolean; base: string }, b: { l: Le
 }
 
 const LeadCard = memo(function LeadCard({ l, dragging, onDrag, base }: { l: LeadRow; dragging: boolean; onDrag: (id: string | null) => void; base: string }) {
+  const nav = useNavigate()
+  const isDraggingRef = useRef(false)
   const task = l.next_task
   const overdue = !!task && Date.parse(task.due_at) < Date.now()
   const assignee = l.assigned_to ? db.profiles.find(p => p.id === l.assigned_to) : null
   const del = useDeleteLead()
 
+  const handleClick = () => {
+    if (isDraggingRef.current) return
+    nav(`${base}/${l.id}`)
+  }
+
   return (
-    <Link
-      to={`${base}/${l.id}`}
-      draggable
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          nav(`${base}/${l.id}`)
+        }
+      }}
+      draggable="true"
       onDragStart={e => {
+        isDraggingRef.current = true
         e.dataTransfer.setData('text/plain', l.id)
         e.dataTransfer.effectAllowed = 'move'
         onDrag(l.id)
       }}
-      onDragEnd={() => onDrag(null)}
-      className={`group relative block cursor-grab overflow-hidden rounded-xl bg-white p-3 pl-3.5 shadow-sm ring-1 ring-slate-200/80 transition active:cursor-grabbing hover:border-slate-300 hover:shadow-md ${
+      onDragEnd={() => {
+        setTimeout(() => {
+          isDraggingRef.current = false
+        }, 150)
+        onDrag(null)
+      }}
+      className={`group relative block select-none cursor-grab overflow-hidden rounded-xl bg-white p-3 pl-3.5 shadow-sm ring-1 ring-slate-200/80 transition active:cursor-grabbing hover:border-slate-300 hover:shadow-md ${
         dragging ? 'scale-[0.98] opacity-40' : ''
       }`}
     >
@@ -78,6 +99,7 @@ const LeadCard = memo(function LeadCard({ l, dragging, onDrag, base }: { l: Lead
           </p>
           <a
             href={`tel:${l.contact.phone}`}
+            draggable={false}
             onClick={e => e.stopPropagation()}
             className="mt-0.5 inline-flex items-center gap-1 truncate text-[10px] text-slate-500 hover:text-blue-600"
             title="Call contact"
@@ -91,21 +113,23 @@ const LeadCard = memo(function LeadCard({ l, dragging, onDrag, base }: { l: Lead
             <span className="text-[12px] font-bold text-slate-900 tabular-nums">
               {shortBudget(l.budget_min, l.budget_max)}
             </span>
-            <button
-              type="button"
-              onClick={e => {
-                e.preventDefault()
-                e.stopPropagation()
-                if (confirm(`Remove lead "${l.contact.name}"?`)) {
-                  del.mutate(l.id)
-                }
-              }}
-              className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-red-600 transition rounded hover:bg-red-50"
-              title="Remove lead"
-              aria-label="Remove lead"
-            >
-              <Trash2 className="size-3" />
-            </button>
+            {!base.startsWith('/sales') && (
+              <button
+                type="button"
+                onClick={e => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (confirm(`Remove lead "${l.contact.name}"?`)) {
+                    del.mutate(l.id)
+                  }
+                }}
+                className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-red-600 transition rounded hover:bg-red-50"
+                title="Remove lead"
+                aria-label="Remove lead"
+              >
+                <Trash2 className="size-3" />
+              </button>
+            )}
           </div>
           {assignee && (
             <span
@@ -126,6 +150,7 @@ const LeadCard = memo(function LeadCard({ l, dragging, onDrag, base }: { l: Lead
             src={l.properties[0].images[0]}
             alt=""
             loading="lazy"
+            draggable={false}
             className="size-7 shrink-0 rounded object-cover shadow-2xs"
           />
         ) : (
@@ -191,7 +216,7 @@ const LeadCard = memo(function LeadCard({ l, dragging, onDrag, base }: { l: Lead
           )}
         </div>
       </div>
-    </Link>
+    </div>
   )
 }, sameCard)
 
@@ -205,6 +230,7 @@ export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages, base
   const base = baseProp ?? `${root}/leads`
   const [drag, setDrag] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
+  const [optimisticStages, setOptimisticStages] = useState<Record<string, LeadStatus>>({})
   const move = useMoveLead()
   const pid = pipelineId ?? defaultPipeline().id
   const allStages = stagesOf(pid)
@@ -212,20 +238,69 @@ export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages, base
     ? allStages.filter(s => visibleStages.includes(s.id))
     : allStages
 
+  // Clean up optimistic overrides that have settled in the underlying data
+  useEffect(() => {
+    setOptimisticStages(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const [id, st] of Object.entries(prev)) {
+        const actual = leads.find(l => l.id === id)
+        if (actual && actual.status === st) {
+          delete next[id]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [leads])
+
+  // Instant optimistic stage calculation
+  const effectiveLeads = leads.map(l => {
+    const override = optimisticStages[l.id]
+    return override ? { ...l, status: override } : l
+  })
+
   const drop = (e: DragEvent, status: LeadStatus, kind: string) => {
     e.preventDefault()
     setOver(null)
     setDrag(null)
     const id = e.dataTransfer.getData('text/plain')
-    if (!id || leads.find(l => l.id === id)?.status === status) return
-    // ponytail: native prompt keeps the lost reason without building a drag-aware modal.
+    const currentLead = effectiveLeads.find(l => l.id === id)
+    if (!id || !currentLead || currentLead.status === status) return
+
     if (kind === 'lost') {
       const reason = prompt('Why was this lead lost? (Cancel to leave it where it is)')
       if (reason === null) return
-      move.mutate({ id, status, reason: reason.trim() || undefined })
+      setOptimisticStages(prev => ({ ...prev, [id]: status }))
+      move.mutate(
+        { id, status, reason: reason.trim() || undefined },
+        {
+          onError: () => {
+            setOptimisticStages(prev => {
+              const next = { ...prev }
+              delete next[id]
+              return next
+            })
+          },
+        }
+      )
       return
     }
-    move.mutate({ id, status })
+
+    // Instantly move the card on screen (0ms delay)
+    setOptimisticStages(prev => ({ ...prev, [id]: status }))
+    move.mutate(
+      { id, status },
+      {
+        onError: () => {
+          setOptimisticStages(prev => {
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
+        },
+      }
+    )
   }
 
   return (
@@ -233,7 +308,7 @@ export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages, base
       {move.isError && <p className="mb-2 text-sm text-red-600">{(move.error as Error).message}</p>}
       <div className="flex items-start gap-3.5">
         {stages.map(s => {
-          const col = leads.filter(l => l.status === s.id)
+          const col = effectiveLeads.filter(l => l.status === s.id)
           const shown = limit ? col.slice(0, limit) : col
           const value = col.reduce((v, l) => v + (l.budget_max ?? l.budget_min ?? 0), 0)
           const active = over === s.id
@@ -242,8 +317,16 @@ export function LeadBoard({ leads, pipelineId, limit, onAdd, visibleStages, base
               key={s.id}
               aria-label={s.label}
               className="w-[16.5rem] shrink-0"
-              onDragOver={e => { e.preventDefault(); setOver(s.id) }}
-              onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(c => (c === s.id ? null : c)) }}
+              onDragOver={e => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                if (over !== s.id) setOver(s.id)
+              }}
+              onDragLeave={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setOver(c => (c === s.id ? null : c))
+                }
+              }}
               onDrop={e => drop(e, s.id, s.kind)}
             >
               <header className="flex items-center gap-2 px-1 pb-2.5 text-sm">
