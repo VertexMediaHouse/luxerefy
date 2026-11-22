@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+﻿import { useMutation, useQuery } from '@tanstack/react-query'
 import { db, ok, respond, write } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
 import { canSeeLead, canSeeTask, findClash, isManager, uid } from '../../lib/rules'
@@ -15,7 +15,7 @@ const join = (t: Task) => {
     ...t,
     lead_name: db.contacts.find(c => c.id === lead?.contact_id)?.name ?? null,
     property_title: db.properties.find(p => p.id === t.property_id)?.title ?? null,
-    assignee_name: db.profiles.find(p => p.id === t.assigned_to)?.full_name ?? '—',
+    assignee_name: db.profiles.find(p => p.id === t.assigned_to)?.full_name ?? 'â€”',
   }
 }
 export type TaskRow = ReturnType<typeof join>
@@ -66,18 +66,32 @@ export function useSaveTask() {
           assigned_to: isManager(user) ? input.assigned_to : user.id, // RLS with-check: agents only schedule themselves
         }
         const clash = findClash(db, task)
-        if (clash) throw new Error(`That slot is already booked — "${clash.title}" at ${dateTime(clash.due_at)}. Pick another time.`)
+        if (clash) throw new Error(`That slot is already booked â€” "${clash.title}" at ${dateTime(clash.due_at)}. Pick another time.`)
         if (existing) {
           const { id: _id, created_at, created_by, ...patch } = task
           ok(await supabase.from('tasks').update(patch).eq('id', task.id))
           // A move is worth recording on the lead, so the timeline explains the new date.
           if (was && (was.due_at !== task.due_at || was.ends_at !== task.ends_at) && task.lead_id)
-            await logRemote(task.lead_id, `Rescheduled: ${task.title} — ${dateTime(was.due_at)} → ${dateTime(task.due_at)}`, user.id)
+            await logRemote(task.lead_id, `Rescheduled: ${task.title} â€” ${dateTime(was.due_at)} â†’ ${dateTime(task.due_at)}`, user.id)
         } else {
           ok(await supabase.from('tasks').insert(task))
-          if (task.lead_id) await logRemote(task.lead_id, `Scheduled: ${task.title} — ${dateTime(task.due_at)}`, user.id)
+          if (task.lead_id) await logRemote(task.lead_id, `Scheduled: ${task.title} â€” ${dateTime(task.due_at)}`, user.id)
         }
         return task
+      }),
+  })
+}
+
+export function useDeleteTask() {
+  const user = useUser()
+  return useMutation({
+    mutationFn: (id: string) =>
+      write(async () => {
+        const t = db.tasks.find(t => t.id === id)
+        if (!t || !canSeeTask(user, t)) throw new Error('Task not found')
+        // RLS denial deletes 0 rows without an error, so check what came back.
+        if (!ok(await supabase.from('tasks').delete().eq('id', id).select('id'))?.length)
+          throw new Error('You do not have permission to delete this task')
       }),
   })
 }

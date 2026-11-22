@@ -24,7 +24,7 @@ export const GOOGLE_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1ujrd3jGs16QELkn1yqR5xM8VTCYcbBaRGiH780UbBFg/edit'
 export const GOOGLE_SCRIPT_WEBAPP_URL =
   (import.meta.env.VITE_GOOGLE_SCRIPT_WEBAPP_URL as string | undefined) ||
-  'https://script.google.com/macros/s/AKfycbzp5XKxbhFneHORqL4FlfJ1HIUpy6rY_GauTS5av_nsaeEAQs7DibR-upff0TR0xMQ8/exec'
+  'https://script.google.com/macros/s/AKfycbzSLUCBuAMI5SQQCjvXHqiVNymoi8fLZI2HTBuqrBFIp4wwA36m0r40UHAbj17JV-uJeA/exec'
 
 export const takenAt = (key: string) => key.slice(PREFIX.length)
 

@@ -135,7 +135,7 @@ export function SalesLayout() {
 
   return (
     <div className="flex h-dvh flex-col bg-canvas">
-      {onLeads && <Watermark text={`${user.full_name} · ${user.email} · ${new Date().toLocaleDateString()}`} />}
+      {onLeads && <Watermark text={`luxerefy.com | Leads | ${user.email}`} />}
       {/* Impersonation Banner for Admins */}
       {isImpersonating && (
         <div className="z-50 flex items-center justify-between bg-blue-600 px-4 py-2 text-xs font-medium text-white shadow-md">

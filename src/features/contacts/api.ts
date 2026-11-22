@@ -51,6 +51,21 @@ export function useContact(id: string) {
   })
 }
 
+/** Deletes the contact and, by cascade, its leads, tasks and activity. */
+export function useDeleteContact() {
+  const user = useUser()
+  return useMutation({
+    mutationFn: (id: string) =>
+      write(async () => {
+        const c = db.contacts.find(c => c.id === id)
+        if (!c || !canSeeContact(user, c)) throw new Error('Contact not found')
+        // RLS denial deletes 0 rows without an error, so check what came back.
+        if (!ok(await supabase.from('contacts').delete().eq('id', id).select('id'))?.length)
+          throw new Error('You can only delete contacts you added that have no leads owned by someone else')
+      }),
+  })
+}
+
 export function useSaveContact() {
   const user = useUser()
   return useMutation({

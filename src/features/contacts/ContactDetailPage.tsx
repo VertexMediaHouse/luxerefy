@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router'
-import { Contact2, Mail, Pencil, Phone } from 'lucide-react'
-import { Avatar, Badge, Button, buttonCls, Card, CardHeader, Empty, Loading, PageHeader, StageChip } from '../../components/ui'
+import { Link, useNavigate, useParams } from 'react-router'
+import { Contact2, Mail, Pencil, Phone, Trash2 } from 'lucide-react'
+import { Avatar, Badge, Button, buttonCls, Card, CardHeader, Empty, ErrorText, Loading, PageHeader, StageChip } from '../../components/ui'
 import { SOURCE_LABEL } from '../../lib/labels'
 import { budget, prettyPhone, relative } from '../../lib/format'
 import { ActivityTimeline } from '../leads/ActivityTimeline'
 import { useDocuments } from '../documents/api'
 import { DocList } from '../documents/DocumentParts'
-import { useContact } from './api'
+import { useContact, useDeleteContact } from './api'
 import { ContactModal, KIND_LABEL, KIND_TONE } from './ContactsPage'
 
 export function ContactDetailPage() {
@@ -15,6 +15,8 @@ export function ContactDetailPage() {
   const { data: c, isLoading } = useContact(id)
   const { data: docs = [] } = useDocuments()
   const [editing, setEditing] = useState(false)
+  const del = useDeleteContact()
+  const navigate = useNavigate()
   if (isLoading) return <Loading />
   if (!c) return <Card><Empty icon={Contact2}>Contact not found. <Link to="/contacts" className="font-semibold text-blue-700">Back</Link></Empty></Card>
   const leadIds = new Set(c.leads.map(l => l.id))
@@ -27,8 +29,16 @@ export function ContactDetailPage() {
         actions={<>
           <a href={`tel:${c.phone}`} className={buttonCls('secondary')}><Phone className="size-4" /> Call</a>
           <Button variant="secondary" onClick={() => setEditing(true)}><Pencil className="size-4" /> Edit</Button>
+          <Button
+            variant="danger"
+            disabled={del.isPending}
+            onClick={() => confirm(`Delete ${c.name}? Their ${c.leads.length} lead(s), tasks and activity are deleted too.`) && del.mutate(c.id, { onSuccess: () => navigate('/contacts') })}
+          >
+            <Trash2 className="size-4" /> Delete
+          </Button>
         </>}
       />
+      <ErrorText error={del.error} />
       <Card className="flex flex-wrap items-center gap-4 p-5 sm:p-6">
         <Avatar name={c.name} size="lg" />
         <div className="min-w-0 flex-1">

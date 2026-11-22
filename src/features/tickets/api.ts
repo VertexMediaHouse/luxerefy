@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cron, db, ok, respond, write } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
 import { canSeeTicket, soleOwner } from '../../lib/rules'
@@ -60,6 +60,25 @@ export function useCreateTicket() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
         body: JSON.stringify({ id: t.id }),
       }).then(r => { if (!r.ok) r.json().then(b => console.error('Ticket email failed:', b.error)) }, e => console.error('Ticket email failed:', e))
+    },
+  })
+}
+
+export function useDeleteTicket() {
+  const user = useUser()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      write(async () => {
+        const t = db.tickets.find(t => t.id === id)
+        if (!t || !canSeeTicket(user, t)) throw new Error('Ticket not found')
+        // RLS denial deletes 0 rows without an error, so check what came back.
+        if (!ok(await supabase.from('tickets').delete().eq('id', id).select('id'))?.length)
+          throw new Error('You do not have permission to delete this ticket')
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
     },
   })
 }

@@ -10,7 +10,7 @@ import type { Task, TaskKind, TaskPriority } from '../../lib/types'
 import { useLeads } from '../leads/api'
 import { useProperties } from '../properties/api'
 import { QUICK_DUE } from '../sales/SalesTaskModal'
-import { useSaveTask, useSetTaskStatus, type TaskInput } from './api'
+import { useDeleteTask, useSaveTask, useSetTaskStatus, type TaskInput } from './api'
 
 type Props = { open: boolean; onClose: () => void; task?: Task | null; defaults?: Partial<TaskInput> }
 
@@ -29,6 +29,7 @@ function TaskForm({ task, defaults, onDone }: { task: Task | null; defaults: Par
   const { data: properties = [] } = useProperties()
   const save = useSaveTask()
   const setStatus = useSetTaskStatus()
+  const del = useDeleteTask()
   const init = { ...defaults, ...task }
   const [kind, setKind] = useState<TaskKind>(init.kind ?? 'follow_up')
   const [priority, setPriority] = useState<TaskPriority>(init.priority ?? 'normal')
@@ -123,7 +124,8 @@ function TaskForm({ task, defaults, onDone }: { task: Task | null; defaults: Par
         <textarea name="description" rows={2} defaultValue={init.description ?? ''} className={inputCls} placeholder="What to cover, what to bring…" />
       </Field>
       <div className="-mx-5 -mb-5 flex flex-wrap items-center justify-end gap-2 rounded-b-xl border-t border-slate-100 bg-slate-50/60 px-5 py-3 sm:col-span-2">
-        <ErrorText error={save.error ?? setStatus.error} />
+        <ErrorText error={save.error ?? setStatus.error ?? del.error} />
+        {task && <Button variant="danger" disabled={del.isPending} onClick={() => confirm('Delete this task?') && del.mutate(task.id, { onSuccess: onDone })}>Delete</Button>}
         {task?.status === 'pending' && <>
           <Button variant="danger" onClick={() => status('cancelled')}>Cancel task</Button>
           <Button variant="secondary" onClick={() => status('done')}>Mark done</Button>

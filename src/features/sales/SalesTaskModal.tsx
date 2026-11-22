@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Button, ErrorText, Field, inputCls, Modal, Segmented } from '../../components/ui'
 import { useUser } from '../../lib/session'
 import { db, write, ok } from '../../lib/db'
@@ -109,7 +109,10 @@ export function SalesTaskModal({
     if (!task || !confirm('Delete this task?')) return
     setBusy(true)
     try {
-      await write(async () => ok(await supabase.from('tasks').delete().eq('id', task.id)))
+      await write(async () => {
+        if (!ok(await supabase.from('tasks').delete().eq('id', task.id).select('id'))?.length)
+          throw new Error('You do not have permission to delete this task')
+      })
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete task')
@@ -143,7 +146,7 @@ export function SalesTaskModal({
             {myLeads.map(l => (
               <option key={l.id} value={l.id}>
                 {leadName(l.id)}
-                {l.property_interest ? ` · ${l.property_interest}` : ''}
+                {l.property_interest ? ` Â· ${l.property_interest}` : ''}
               </option>
             ))}
           </select>
@@ -220,7 +223,7 @@ export function SalesTaskModal({
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={2}
-            placeholder="What to cover, what to bring…"
+            placeholder="What to cover, what to bringâ€¦"
             className={inputCls}
           />
         </Field>
@@ -240,7 +243,7 @@ export function SalesTaskModal({
               Cancel
             </Button>
             <Button type="submit" disabled={busy}>
-              {busy ? 'Saving…' : isEditing ? 'Save' : 'Create task'}
+              {busy ? 'Savingâ€¦' : isEditing ? 'Save' : 'Create task'}
             </Button>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { Badge, Button, Card, Empty, ErrorText, Field, inputCls, Loading, Modal,
 import { TICKET_STATUS_LABEL, TICKET_STATUS_TONE } from '../../lib/labels'
 import { dateTime, relative } from '../../lib/format'
 import type { TicketStatus } from '../../lib/types'
-import { useCreateTicket, useTickets, useUpdateTicket, type TicketRow } from './api'
+import { useCreateTicket, useDeleteTicket, useTickets, useUpdateTicket, type TicketRow } from './api'
 
 export const ticketNo = (n: number) => `#TK-${String(n).padStart(3, '0')}`
 
@@ -99,14 +99,15 @@ export function TicketsPage() {
         <RaiseForm onDone={() => setRaising(false)} />
       </Modal>
       <Modal open={!!open} onClose={() => setOpenId(null)} title={open ? `${ticketNo(open.number)}: ${open.title}` : ''} wide>
-        {open && <TicketDetail t={open} />}
+        {open && <TicketDetail t={open} onDeleted={() => setOpenId(null)} />}
       </Modal>
     </>
   )
 }
 
-function TicketDetail({ t }: { t: TicketRow }) {
+function TicketDetail({ t, onDeleted }: { t: TicketRow; onDeleted: () => void }) {
   const update = useUpdateTicket()
+  const del = useDeleteTicket()
   const steps = [
     { at: t.created_at, label: `Raised by ${t.raised_by_name ?? 'User'}`, icon: Plus, done: true },
     { at: t.in_progress_at, label: 'Work started', icon: Headphones, done: !!t.in_progress_at },
@@ -165,7 +166,10 @@ function TicketDetail({ t }: { t: TicketRow }) {
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100">
-        <ErrorText error={update.error} />
+        <ErrorText error={update.error ?? del.error} />
+        <Button variant="danger" disabled={del.isPending} onClick={() => confirm('Delete this ticket?') && del.mutate(t.id, { onSuccess: onDeleted })}>
+          Delete
+        </Button>
         {t.status === 'pending' && (
           <Button variant="secondary" onClick={() => update.mutate({ id: t.id, status: 'in_progress' })}>
             Start work
