@@ -29,7 +29,9 @@ assert.equal(source('WhatsApp'), 'other', 'WhatsApp is no longer a channel we tr
 assert.equal(source('Walk-in'), 'walk_in')
 assert.equal(source('Print Ad'), 'print_ad')
 assert.equal(source('JBN'), 'jbn')
-assert.equal(source('Magicbricks'), 'other', 'an unknown channel is not guessed')
+assert.equal(source('Magic Bricks'), 'magic_bricks')
+assert.equal(source('MagicBricks'), 'magic_bricks')
+assert.equal(source('Housing.com'), 'other', 'an unknown channel is not guessed')
 assert.equal(source(''), 'other')
 
 const parsed = parseRows([

@@ -4,7 +4,7 @@ import type { DocFolder, GoalMetric, GoalPeriod, LeadSource, LeadType, PropertyC
 export type { Tone }
 
 export const SOURCE_LABEL: Record<LeadSource, string> = {
-  '99acres': '99acres', social_media: 'Social media', website: 'Website', property_page: 'Property page', print_ad: 'Print Ad', jbn: 'JBN',
+  '99acres': '99acres', magic_bricks: 'Magic Bricks', social_media: 'Social media', website: 'Website', property_page: 'Property page', print_ad: 'Print Ad', jbn: 'JBN',
   referral: 'Referral', walk_in: 'Walk-in', sales_form: 'Sales form', other: 'Other',
 }
 export const LEAD_TYPE_LABEL: Record<LeadType, string> = {

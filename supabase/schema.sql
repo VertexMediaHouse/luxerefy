@@ -67,7 +67,7 @@ create table if not exists properties (
 create table if not exists leads (
   id text primary key default gen_random_uuid()::text,
   contact_id text not null references contacts(id) on delete cascade,
-  source text not null check (source in ('99acres', 'social_media', 'website', 'property_page', 'print_ad', 'jbn', 'referral', 'walk_in', 'sales_form', 'other')),
+  source text not null check (source in ('99acres', 'magic_bricks', 'social_media', 'website', 'property_page', 'print_ad', 'jbn', 'referral', 'walk_in', 'sales_form', 'other')),
   pipeline_id text not null references pipelines(id),
   status text not null,
   property_ids text[] not null default '{}',

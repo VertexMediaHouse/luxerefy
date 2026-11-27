@@ -38,7 +38,7 @@ $email = $pick('email', 'emailaddress', 'emailid');
 
 // leads.source is a check-constrained enum: anything else makes capture_leads reject the row.
 // A landing-page sheet usually has no source column at all, so default to 'website'.
-const SOURCES = ['99acres', 'social_media', 'website', 'property_page', 'print_ad', 'jbn', 'referral', 'walk_in', 'sales_form', 'other'];
+const SOURCES = ['99acres', 'magic_bricks', 'social_media', 'website', 'property_page', 'print_ad', 'jbn', 'referral', 'walk_in', 'sales_form', 'other'];
 $rawSource = $pick('source', 'cp', 'channelpartner', 'partner');
 $source = 'website';
 if ($rawSource !== null) {

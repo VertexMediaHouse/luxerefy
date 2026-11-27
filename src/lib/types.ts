@@ -3,7 +3,7 @@ export type Role = 'owner' | 'admin' | 'manager' | 'sales'
 export type Tone = 'slate' | 'blue' | 'violet' | 'amber' | 'green' | 'red'
 /** A stage id, not a fixed set: pipelines and their stages are rows now. See `stages.ts`. */
 export type LeadStatus = string
-export type LeadSource = '99acres' | 'social_media' | 'website' | 'property_page' | 'print_ad' | 'jbn' | 'referral' | 'walk_in' | 'sales_form' | 'other'
+export type LeadSource = '99acres' | 'magic_bricks' | 'social_media' | 'website' | 'property_page' | 'print_ad' | 'jbn' | 'referral' | 'walk_in' | 'sales_form' | 'other'
 export type LeadType = 'apartment' | 'bungalow' | 'villa' | 'weekend_apartment' | 'weekend_villa'
 export type ActivityType = 'created' | 'enquiry' | 'call' | 'text' | 'note' | 'status_change' | 'assignment' | 'follow_up'
 export type PropertySegment = 'residential' | 'commercial'

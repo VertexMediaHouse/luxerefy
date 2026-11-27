@@ -22,6 +22,7 @@ const DAY = 86400e3
 const SOURCE_STYLE: Record<string, string> = {
   sales_form: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
   '99acres': 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+  magic_bricks: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
   social_media: 'bg-purple-50 text-purple-700 ring-1 ring-purple-600/20',
   referral: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
   website: 'bg-cyan-50 text-cyan-700 ring-1 ring-cyan-600/20',

@@ -40,7 +40,7 @@ Give each CP their own copy of the sheet, so ownership can be transferred:
    | `Remarks` / `Message` / `Notes` | message |
    | `Row ID` | `external_ref` |
 
-   `Source` must be one of the CRM's own values (`99acres`, `social_media`,
+   `Source` must be one of the CRM's own values (`99acres`, `magic_bricks`, `social_media`,
    `website`, `property_page`, `print_ad`, `jbn`, `referral`, `walk_in`,
    `sales_form`, `other`). Any other text is taken as a channel partner name:
    the lead is captured as `referral` with that name in `referral_detail`. No
