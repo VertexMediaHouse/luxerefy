@@ -49,28 +49,29 @@ interface ParsedPropertyRow {
 function parsePropertyRows(rows: SheetRow[]): ParsedPropertyRow[] {
   return rows.map((r, i) => {
     const row = i + 2
+    // Exact header match wins over a substring one, else "Property Type" became the title
+    // and "Area (sq ft)" became the locality.
     const get = (keys: string[]) => {
-      for (const k of Object.keys(r)) {
-        const nk = norm(k)
-        if (keys.some(expected => nk === expected || nk.includes(expected))) {
-          return String(r[k] ?? '').trim()
-        }
-      }
-      return ''
+      const ks = Object.keys(r)
+      const k = ks.find(k => keys.includes(norm(k))) ?? ks.find(k => keys.some(e => norm(k).includes(e)))
+      return k === undefined ? '' : String(r[k] ?? '').trim()
     }
 
-    const title = get(['title', 'name', 'property', 'propertyname'])
-    const project = get(['project', 'society', 'building', 'developer']) || title
-    const locality = get(['locality', 'area', 'location', 'address']) || 'Ahmedabad'
-    const city = get(['city']) || 'Ahmedabad'
-    const config = get(['configuration', 'config', 'bhk', 'type']) || '3 BHK'
-    const areaSqft = parseInt(get(['area', 'areasqft', 'sqft', 'superbuildup']).replace(/[^\d]/g, '') || '1800', 10)
-    const price = money(get(['price', 'cost', 'amount', 'budget', 'value'])) ?? 15000000
+    const title = get(['title', 'propertyname', 'propertytitle', 'listing', 'name'])
+    const project = get(['project', 'projectname', 'society', 'building', 'developer']) || title
+    // Blank cells stay blank (schema defaults) — never invent values the sheet didn't have.
+    // A bare "Area" column is the neighbourhood; "Area (sq ft)" is size, handled below.
+    const areaKey = Object.keys(r).find(k => norm(k) === 'area')
+    const locality = get(['locality', 'location', 'address']) || (areaKey ? String(r[areaKey] ?? '').trim() : '')
+    const city = get(['city'])
+    const config = get(['configuration', 'config', 'bhk'])
+    const areaSqft = parseInt(get(['areasqft', 'sqft', 'carpetarea', 'superbuiltup', 'superbuildup', 'builtup', 'size']).replace(/[^\d]/g, '') || '0', 10)
+    const price = money(get(['price', 'cost', 'amount', 'budget', 'value'])) ?? 0
     const segment = parseSegment(get(['segment', 'sector']))
     const category = parseCategory(get(['category', 'propertytype', 'kind']))
-    const desc = get(['description', 'details', 'notes', 'overview']) || `${config} in ${locality}, ${city}.`
+    const desc = get(['description', 'details', 'notes', 'overview'])
     const amenitiesRaw = get(['amenities', 'features', 'facilities'])
-    const amenities = amenitiesRaw ? amenitiesRaw.split(/[,;\n]+/).map(a => a.trim()).filter(Boolean) : ['Parking', 'Security', 'Lift']
+    const amenities = amenitiesRaw ? amenitiesRaw.split(/[,;\n]+/).map(a => a.trim()).filter(Boolean) : []
 
     if (!title) {
       return { row, title: 'Untitled', locality, price, input: null, error: 'Property title is missing' }
@@ -80,7 +81,7 @@ function parsePropertyRows(rows: SheetRow[]): ParsedPropertyRow[] {
       title,
       project,
       config,
-      area_sqft: isNaN(areaSqft) || areaSqft <= 0 ? 1800 : areaSqft,
+      area_sqft: isNaN(areaSqft) || areaSqft <= 0 ? 0 : areaSqft,
       price,
       segment,
       category,
@@ -134,6 +135,10 @@ export function ImportPropertiesModal({ open, onClose }: { open: boolean; onClos
       const json = XLSX.utils.sheet_to_json<SheetRow>(wb.Sheets[first], { defval: '', raw: false })
       if (!json.length) throw new Error('That sheet has a header but no data rows under it.')
       if (json.length > MAX_ROWS) throw new Error(`That sheet has ${json.length} rows. Please split it into smaller files.`)
+      const headers = Object.keys(json[0]).map(norm)
+      if (headers.some(h => /phone|mobile|contact|whatsapp/.test(h)) && !headers.some(h => /price|cost|amount|value|bhk|config|sqft|amenit/.test(h))) {
+        throw new Error('This looks like a leads file (it has phone numbers but no property price/size). Import it from the Leads page instead.')
+      }
       setSheet(json)
       setFileName(file.name)
     } catch (e) {
@@ -225,8 +230,8 @@ export function ImportPropertiesModal({ open, onClose }: { open: boolean; onClos
                       <tr key={r.row} className={r.input ? '' : 'bg-red-50/50 text-red-700'}>
                         <td className="px-3 py-1.5 font-mono text-slate-400">{r.row}</td>
                         <td className="px-3 py-1.5 font-medium">{r.title}</td>
-                        <td className="px-3 py-1.5 text-slate-500">{r.locality}</td>
-                        <td className="px-3 py-1.5">{inr(r.price)}</td>
+                        <td className="px-3 py-1.5 text-slate-500">{r.locality || '—'}</td>
+                        <td className="px-3 py-1.5">{r.price ? inr(r.price) : '—'}</td>
                         <td className="px-3 py-1.5">{r.input ? <span className="text-emerald-600 font-medium">Valid</span> : <span className="text-red-600">{r.error}</span>}</td>
                       </tr>
                     ))}

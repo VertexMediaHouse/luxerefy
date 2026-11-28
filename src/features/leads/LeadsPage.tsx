@@ -92,7 +92,7 @@ export function LeadsPage() {
   const [modal, setModal] = useState<'new' | 'import' | 'assign' | null>(null)
   const [setupOpen, setSetupOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [rawSelected, setSelectedIds] = useState<Set<string>>(new Set())
   const delMany = useDeleteLeads()
 
   // Saved board layouts live in localStorage
@@ -172,6 +172,8 @@ export function LeadsPage() {
   )
 
   const rows = status === 'all' ? base : base.filter(l => l.status === status)
+  // Only rows still on screen count as selected, so a filter change can't make bulk delete/assign hit hidden leads.
+  const selectedIds = new Set(rows.filter(r => rawSelected.has(r.id)).map(r => r.id))
   const activeView = views.find(v => v.id === activeViewId)
 
   // Selection handlers

@@ -125,13 +125,13 @@ function TaskForm({ task, defaults, onDone }: { task: Task | null; defaults: Par
       </Field>
       <div className="-mx-5 -mb-5 flex flex-wrap items-center justify-end gap-2 rounded-b-xl border-t border-slate-100 bg-slate-50/60 px-5 py-3 sm:col-span-2">
         <ErrorText error={save.error ?? setStatus.error ?? del.error} />
-        {task && <Button variant="danger" disabled={del.isPending} onClick={() => confirm('Delete this task?') && del.mutate(task.id, { onSuccess: onDone })}>Delete</Button>}
+        {task && <Button variant="danger" loading={del.isPending} onClick={() => confirm('Delete this task?') && del.mutate(task.id, { onSuccess: onDone })}>Delete</Button>}
         {task?.status === 'pending' && <>
           <Button variant="danger" onClick={() => status('cancelled')}>Cancel task</Button>
           <Button variant="secondary" onClick={() => status('done')}>Mark done</Button>
         </>}
         {task && task.status !== 'pending' && <Button variant="secondary" onClick={() => status('pending')}>Reopen</Button>}
-        <Button type="submit" disabled={save.isPending}>{save.isPending ? 'Saving…' : task ? 'Save' : 'Create'}</Button>
+        <Button type="submit" loading={save.isPending}>{task ? 'Save' : 'Create'}</Button>
       </div>
     </form>
   )

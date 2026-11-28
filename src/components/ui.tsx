@@ -17,8 +17,26 @@ export type ButtonVariant = keyof typeof BTN
 export const buttonCls = (v: ButtonVariant = 'primary') =>
   `inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${BTN[v]}`
 
-export function Button({ variant = 'primary', className = '', ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
-  return <button type="button" {...p} className={`${buttonCls(variant)} ${className}`} />
+export function Button({
+  variant = 'primary',
+  className = '',
+  loading = false,
+  disabled,
+  children,
+  ...p
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; loading?: boolean }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled || loading}
+      aria-busy={loading ? 'true' : undefined}
+      {...p}
+      className={`${buttonCls(variant)} ${className}`}
+    >
+      {loading && <Loader2 className="size-4 animate-spin shrink-0" aria-hidden="true" />}
+      {children}
+    </button>
+  )
 }
 
 /** White pill control for toolbars (filters, view switch, selects). */

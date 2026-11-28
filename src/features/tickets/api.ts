@@ -31,6 +31,8 @@ export function useTickets() {
 export type TicketRow = NonNullable<ReturnType<typeof useTickets>['data']>[number]
 
 /** A ticket is raised with subject (title) and body (description). */
+const TICKET_FORM = 'https://docs.google.com/forms/d/e/1FAIpQLSf7mJfoEweAUSoMozOUYD6dVQ-T5Nzqz8zaKyxfBQEtRNa9DQ/formResponse'
+
 export function useCreateTicket() {
   const user = useUser()
   const qc = useQueryClient()
@@ -53,6 +55,16 @@ export function useCreateTicket() {
     onSuccess: async (t) => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
+      // Also file it on the Luxerefy Ticket Google Form. no-cors: Google sends no CORS headers,
+      // so the response is opaque — fire-and-forget like the email below.
+      fetch(TICKET_FORM, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: new URLSearchParams({
+          'entry.619169916': `#TK-${String(t.number).padStart(3, '0')} ${t.title}`, // Subject
+          'entry.120387872': t.description, // Body
+        }),
+      }).catch(() => {})
       // Fire-and-forget: a failed email must not undo or block the saved ticket.
       const { data } = await supabase.auth.getSession()
       fetch('/api/admin/ticket-email', {

@@ -50,3 +50,8 @@ assert.equal(parsed[2].error, 'Not a valid mobile number')
 assert.ok(!parsed[1].input && !parsed[2].input)
 
 console.log('importSheet ok')
+
+// Mixed units in one range, and exact headers beating substring ones.
+assert.deepEqual(range('1.5 Cr - 80 L'), [15000000, 8000000])
+assert.equal(mapHeaders(['Project Name', 'Name', 'Mobile']).name, 'Name')
+console.log('importSheet mixed-unit + header ok')

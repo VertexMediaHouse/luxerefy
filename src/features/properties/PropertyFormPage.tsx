@@ -157,9 +157,9 @@ function PropertyForm({ initial }: { initial: Property | null }) {
         title={initial ? initial.title : 'New property'}
         subtitle={initial ? `${initial.locality}, ${initial.config}` : 'Add a listing; tick "Public" to get a shareable link'}
         actions={<>
-          {initial && isManager(user) && <Button variant="danger" onClick={remove}><Trash2 className="size-4" /> Delete</Button>}
+          {initial && isManager(user) && <Button variant="danger" loading={del.isPending} onClick={remove}><Trash2 className="size-4" /> Delete</Button>}
           {initial?.is_public && <a href={`/p/${initial.slug}`} target="_blank" rel="noreferrer" className={buttonCls('secondary')}><ExternalLink className="size-4" /> Public page</a>}
-          <Button type="submit" disabled={save.isPending}>{save.isSuccess && initial ? 'Saved ✓' : 'Save property'}</Button>
+          <Button type="submit" loading={save.isPending}>{save.isSuccess && initial ? 'Saved ✓' : 'Save property'}</Button>
         </>}
       />
       <div className="mb-4"><ErrorText error={save.error ?? del.error} /></div>

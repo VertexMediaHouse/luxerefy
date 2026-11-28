@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { useBase } from '../../lib/session'
+import { useBase, useUser } from '../../lib/session'
 import { Activity as ActivityIcon, Building2, CalendarPlus, Check, CheckCircle2, Clock, Hash, Home, Mail, MapPin, MessageCircle, MessageSquare, Phone, PhoneCall, Plus, Sparkles, StickyNote, Trash2, UserCheck, Users, Wallet, X, XCircle } from 'lucide-react'
 import { Avatar, Badge, Button, buttonCls, StageChip, StageIcon, Card, CardHeader, Empty, ErrorText, Field, HeaderLink, inlineInputCls, inputCls, Loading, Modal, PageHeader } from '../../components/ui'
-import { isLost, wonOf } from '../../lib/rules'
+import { isLost, isManager, wonOf } from '../../lib/rules'
 import { LEAD_TYPES, LEAD_TYPE_LABEL, NEXT_ACTIONS, SOURCE_LABEL, TASK_KIND_LABEL, TIMED_KINDS } from '../../lib/labels'
 import { stagesOf } from '../../lib/stages'
 import { budget, dateTime, prettyPhone, relative, toLocalInput, waLink } from '../../lib/format'
@@ -40,6 +40,7 @@ export function LeadDetailPage() {
   const { data: lead, isLoading } = useLead(id)
   const actions = useLeadActions(id)
   const del = useDeleteLead()
+  const user = useUser()
   const [mode, setMode] = useState<Mode | null>(null)
   const [rescheduling, setRescheduling] = useState<Task | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
@@ -59,17 +60,19 @@ export function LeadDetailPage() {
           <Button variant="secondary" onClick={() => setMode('call')}><PhoneCall className="size-4" /> Log call</Button>
           <Button variant="secondary" onClick={() => setMode('text')}><MessageSquare className="size-4" /> Log text</Button>
           <Button variant="secondary" onClick={() => setMode('note')}><StickyNote className="size-4" /> Note</Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              if (confirm(`Are you sure you want to remove lead "${lead.contact.name}"?`)) {
-                del.mutate(lead.id, { onSuccess: () => nav(`${root}/leads`) })
-              }
-            }}
-            className="text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
-          >
-            <Trash2 className="size-4" /> Remove
-          </Button>
+          {isManager(user) && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (confirm(`Are you sure you want to remove lead "${lead.contact.name}"?`)) {
+                  del.mutate(lead.id, { onSuccess: () => nav(`${root}/leads`) })
+                }
+              }}
+              className="text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
+            >
+              <Trash2 className="size-4" /> Remove
+            </Button>
+          )}
         </>}
       />
 

@@ -30,27 +30,111 @@ function useCaptureGuard() {
   useEffect(() => {
     const html = document.documentElement
     let timer: number | undefined
-    const show = () => { clearTimeout(timer); if (document.hasFocus() && !document.hidden) html.dataset.guard = 'on' }
+    let isMetaDown = false
+    let isShiftDown = false
+
+    const show = () => {
+      clearTimeout(timer)
+      if (!isMetaDown && !isShiftDown && document.hasFocus() && !document.hidden) {
+        html.dataset.guard = 'on'
+      }
+    }
+
     const hide = (ms = 0) => {
       clearTimeout(timer)
       html.dataset.guard = 'hidden'
-      if (ms) timer = window.setTimeout(show, ms)
+      if (ms > 0) {
+        timer = window.setTimeout(show, ms)
+      }
     }
+
     const block = (e: Event) => e.preventDefault()
+
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
+      const isMeta = e.key === 'Meta' || e.key === 'OS' || e.metaKey
+      const isShift = e.key === 'Shift' || e.shiftKey
+
+      if (e.key === 'Meta' || e.key === 'OS') isMetaDown = true
+      if (e.key === 'Shift') isShiftDown = true
+
+      // If user holds Win/Cmd, or presses Shift while Win/Cmd is down, or holds both:
+      // Stay hidden indefinitely without auto-unblur timer!
+      if (isMeta || (isMetaDown && isShift) || (isShiftDown && isMeta)) {
+        hide(0)
+      }
+
+      // PrintScreen key down
+      if (k === 'printscreen') {
+        hide(0)
+      }
+
+      // Win+Shift+S, Cmd+Shift+3/4/5, Ctrl+Shift+S
+      if ((isMeta || e.ctrlKey) && isShift && (k === 's' || ['3', '4', '5'].includes(k))) {
+        e.preventDefault()
+        hide(0)
+      }
+
+      // Block inspect / save / print shortcuts
       const mod = e.ctrlKey || e.metaKey
-      // Win key (Win+Shift+S) / Cmd key (Cmd+Shift+3/4/5): blank before the OS grabs the frame.
-      if (e.key === 'Meta' || e.key === 'OS') return hide(1500)
-      if (k === 'printscreen') return hide(1500)
-      if (k === 'f12' || (mod && ['p', 's', 'u'].includes(k)) || (mod && e.shiftKey && ['i', 'j', 'c', 's'].includes(k))) e.preventDefault()
+      if (k === 'f12' || (mod && ['p', 's', 'u'].includes(k)) || (mod && e.shiftKey && ['i', 'j', 'c'].includes(k))) {
+        e.preventDefault()
+      }
     }
+
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Meta' || e.key === 'OS') return show()
-      // Windows only reports PrintScreen on keyup, after the capture: wipe the clipboard copy.
-      if (e.key.toLowerCase() === 'printscreen') {
-        hide(1500)
+      const k = e.key.toLowerCase()
+      if (e.key === 'Meta' || e.key === 'OS') isMetaDown = false
+      if (e.key === 'Shift') isShiftDown = false
+
+      if (k === 'printscreen') {
         navigator.clipboard?.writeText('').catch(() => {})
+        hide(3000)
+        return
+      }
+
+      // When modifier keys are released:
+      // If user pressed Win+Shift+S, Windows Snipping Tool takes focus away from the browser,
+      // so document.hasFocus() is false and it remains blurred.
+      // If user merely held and released Win/Shift while remaining inside the browser,
+      // restore after a short grace period (300ms) only if still focused and no keys held.
+      if (!isMetaDown && !isShiftDown) {
+        clearTimeout(timer)
+        timer = window.setTimeout(() => {
+          if (!isMetaDown && !isShiftDown && document.hasFocus() && !document.hidden) {
+            show()
+          }
+        }, 300)
+      }
+    }
+
+    const onWindowBlur = (e: FocusEvent) => {
+      // Ignore if a child DOM element inside the page triggered the blur
+      if (e.target && e.target !== window && e.target !== document) return
+      // The browser window itself lost focus (e.g. Snipping Tool opened, Win+Shift+S, PrtScn, Alt-Tab)
+      // Blank immediately so external screenshot tools capture only a blurred screen
+      hide(0)
+    }
+
+    const onWindowFocus = () => {
+      // Window regained focus. Reset key states since OS may have intercepted keyup.
+      isMetaDown = false
+      isShiftDown = false
+      show()
+    }
+
+    const onPointerDown = () => {
+      // Clicking inside the app confirms active user presence
+      if (!isMetaDown && document.hasFocus()) {
+        show()
+      }
+    }
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        hide(0)
+      } else if (!isMetaDown && document.hasFocus()) {
+        show()
       }
     }
 
@@ -62,19 +146,33 @@ function useCaptureGuard() {
     }
 
     html.dataset.guard = 'on'
-    const events: [EventTarget, string, EventListener][] = [
+
+    // Capture-phase blockers for clipboard and context menu
+    const captureEvents: [EventTarget, string, EventListener][] = [
       [document, 'copy', block],
       [document, 'cut', block],
       [document, 'contextmenu', block],
       [document, 'dragstart', onDragStart as EventListener],
-      [window, 'keydown', onKeyDown as EventListener],
-      [window, 'keyup', onKeyUp as EventListener],
-      [window, 'focus', show],
     ]
-    for (const [t, n, f] of events) t.addEventListener(n, f, true)
+    for (const [t, n, f] of captureEvents) t.addEventListener(n, f, true)
+
+    // Bubble-phase listeners for keyboard and window state
+    window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('keyup', onKeyUp, true)
+    window.addEventListener('focus', onWindowFocus, false)
+    window.addEventListener('blur', onWindowBlur, false)
+    window.addEventListener('pointerdown', onPointerDown, false)
+    document.addEventListener('visibilitychange', onVisibilityChange, false)
+
     return () => {
       clearTimeout(timer)
-      for (const [t, n, f] of events) t.removeEventListener(n, f, true)
+      for (const [t, n, f] of captureEvents) t.removeEventListener(n, f, true)
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keyup', onKeyUp, true)
+      window.removeEventListener('focus', onWindowFocus, false)
+      window.removeEventListener('blur', onWindowBlur, false)
+      window.removeEventListener('pointerdown', onPointerDown, false)
+      document.removeEventListener('visibilitychange', onVisibilityChange, false)
       delete html.dataset.guard
     }
   }, [])

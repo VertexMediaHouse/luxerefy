@@ -1,7 +1,7 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Button, ErrorText, Field, inputCls, Modal, Segmented } from '../../components/ui'
 import { useUser } from '../../lib/session'
-import { db, write, ok } from '../../lib/db'
+import { db, write, ok, writeHooks } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
 import { TASK_KIND_LABEL, TIMED_KINDS } from '../../lib/labels'
 import { toLocalInput } from '../../lib/format'
@@ -110,6 +110,8 @@ export function SalesTaskModal({
     setBusy(true)
     try {
       await write(async () => {
+        db.tasks = db.tasks.filter(t => t.id !== task.id)
+        writeHooks.after()
         if (!ok(await supabase.from('tasks').delete().eq('id', task.id).select('id'))?.length)
           throw new Error('You do not have permission to delete this task')
       })
@@ -242,8 +244,8 @@ export function SalesTaskModal({
             <Button variant="secondary" onClick={onClose} disabled={busy}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy}>
-              {busy ? 'Savingâ€¦' : isEditing ? 'Save' : 'Create task'}
+            <Button type="submit" loading={busy}>
+              {isEditing ? 'Save' : 'Create task'}
             </Button>
           </div>
         </div>

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router'
 import { Building2, CheckCircle2, Mail, MapPin, Phone, Send, Sparkles, User } from 'lucide-react'
 import { Brand } from '../../components/Layout'
 import { Badge, Button } from '../../components/ui'
-import { inr } from '../../lib/format'
+import { askingPrice, propertyFacts } from '../../lib/format'
 import { PROPERTY_STATUS_LABEL, PROPERTY_STATUS_TONE } from '../../lib/labels'
 import { captureRemote, db } from '../../lib/db'
 import type { LeadSource } from '../../lib/types'
@@ -127,7 +127,7 @@ export function SalesFormPage() {
             <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50/80 p-3.5 text-left">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Property Enquired</p>
               <p className="mt-0.5 text-sm font-semibold text-slate-900">{chosenProperty.title}</p>
-              <p className="text-xs text-slate-500">{chosenProperty.locality} · {inr(chosenProperty.price)}</p>
+              <p className="text-xs text-slate-500">{chosenProperty.locality} · {askingPrice(chosenProperty.price)}</p>
             </div>
           )}
 
@@ -189,10 +189,10 @@ export function SalesFormPage() {
                     {targetProperty.title}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {targetProperty.locality} · {targetProperty.config} · {targetProperty.area_sqft.toLocaleString('en-IN')} sq ft
+                    {propertyFacts(targetProperty)}
                   </p>
                   <p className="mt-1 text-sm font-bold text-slate-900">
-                    {inr(targetProperty.price)}
+                    {askingPrice(targetProperty.price)}
                   </p>
                 </div>
               </div>
@@ -279,7 +279,7 @@ export function SalesFormPage() {
                       <option value="">Other / General Requirement</option>
                       {activeProperties.map(p => (
                         <option key={p.id} value={p.id}>
-                          {p.title} · {p.locality} ({inr(p.price)})
+                          {p.title} · {p.locality} ({askingPrice(p.price)})
                         </option>
                       ))}
                     </select>

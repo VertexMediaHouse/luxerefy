@@ -38,3 +38,10 @@ export const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(
 export const toLocalInput = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 
 export const fileSize = (b: number) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
+
+/** A property's asking price; 0 means none was entered. */
+export const askingPrice = (n: number) => (n > 0 ? inr(n) : 'Price on request')
+
+/** "Bopal · 3 BHK · 1,800 sq ft", skipping whatever is blank. */
+export const propertyFacts = (p: { locality: string; config: string; area_sqft: number }) =>
+  [p.locality, p.config, p.area_sqft > 0 && `${p.area_sqft.toLocaleString('en-IN')} sq ft`].filter(Boolean).join(' · ')

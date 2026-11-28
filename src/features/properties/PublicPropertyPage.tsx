@@ -4,7 +4,7 @@ import { BedDouble, CheckCircle2, ChevronLeft, ChevronRight, Info, MapPin, Ruler
 import { Button, Card, ErrorText, Field, inputCls, Loading } from '../../components/ui'
 import { Brand } from '../../components/Layout'
 import { PROPERTY_STATUS_LABEL } from '../../lib/labels'
-import { inr } from '../../lib/format'
+import { askingPrice } from '../../lib/format'
 import type { Property } from '../../lib/types'
 import { usePublicProperty, useSubmitEnquiry } from './api'
 import { getAmenityIcon } from './amenities'
@@ -103,7 +103,7 @@ function Listing({ p }: { p: Property }) {
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-slate-900">{p.title}</h1>
           <p className="mt-2 flex items-center gap-1.5 text-slate-500"><MapPin className="size-4" /> {p.locality}, {p.city}</p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <span className="text-3xl font-extrabold text-ink">{inr(p.price)}</span>
+            <span className="text-3xl font-extrabold text-ink">{askingPrice(p.price)}</span>
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{PROPERTY_STATUS_LABEL[p.status]}</span>
           </div>
           <div className="mt-6 flex flex-wrap gap-3 text-sm font-semibold text-slate-700">

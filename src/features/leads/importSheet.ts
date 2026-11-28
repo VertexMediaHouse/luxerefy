@@ -29,12 +29,16 @@ const aliases = (f: Field) => ALIASES[f] as readonly string[]
 
 /** The header row mapped onto our fields. First column to claim a field keeps it. */
 export function mapHeaders(headers: string[]): Partial<Record<Field, string>> {
+  // Exact names claim first across all headers, so "Project Name" can't take `name` from a later "Name".
   const out: Partial<Record<Field, string>> = {}
-  for (const h of headers) {
-    const n = norm(h)
-    if (!n) continue
-    const field = FIELDS.find(f => aliases(f).includes(n)) ?? FIELDS.find(f => aliases(f).some(a => n.includes(a)))
-    if (field && !out[field]) out[field] = h
+  const used = new Set<string>()
+  for (const fuzzy of [false, true]) {
+    for (const h of headers) {
+      const n = norm(h)
+      if (!n || used.has(h)) continue
+      const field = FIELDS.find(f => !out[f] && aliases(f).some(a => (fuzzy ? n.includes(a) : n === a)))
+      if (field) { out[field] = h; used.add(h) }
+    }
   }
   return out
 }
@@ -60,7 +64,9 @@ export function range(v: unknown): [number | null, number | null] {
   const parts = s.split(/\s*(?:-|–|—|to)\s*/i).filter(Boolean)
   if (parts.length < 2) return [money(s), null]
   const unit = s.match(/crore|cr|lakh|lac|l\s*$/i)?.[0] ?? ''
-  return [money(`${parts[0]} ${unit}`), money(`${parts[1]} ${unit}`)]
+  // "1.5 Cr - 80 L": a part that names its own unit keeps it; only bare parts borrow the shared one.
+  const withUnit = (p: string) => money(/[a-z]/i.test(p) ? p : `${p} ${unit}`)
+  return [withUnit(parts[0]), withUnit(parts[1])]
 }
 
 const SOURCES = Object.keys(SOURCE_LABEL) as LeadSource[]

@@ -111,7 +111,7 @@ function NewLeadForm({ onClose, assignTo, base }: { onClose: () => void; assignT
       <div className="flex items-center justify-end gap-3 sm:col-span-2">
         <ErrorText error={create.error} />
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button type="submit" disabled={create.isPending}>Create lead</Button>
+        <Button type="submit" loading={create.isPending}>Create lead</Button>
       </div>
     </form>
   )

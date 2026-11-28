@@ -96,7 +96,7 @@ function ContactForm({ contact, onDone }: { contact?: Contact; onDone: () => voi
       <div className="flex items-center justify-end gap-3">
         <ErrorText error={save.error} />
         <Button variant="secondary" onClick={onDone}>Cancel</Button>
-        <Button type="submit" disabled={save.isPending}>Save</Button>
+        <Button type="submit" loading={save.isPending}>Save</Button>
       </div>
     </form>
   )

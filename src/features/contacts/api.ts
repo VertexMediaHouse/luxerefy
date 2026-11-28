@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { db, ok, respond, write } from '../../lib/db'
+import { db, ok, respond, write, writeHooks } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
 import { canSeeLead, isManager, normalizePhone } from '../../lib/rules'
 import { useUser } from '../../lib/session'
@@ -59,9 +59,18 @@ export function useDeleteContact() {
       write(async () => {
         const c = db.contacts.find(c => c.id === id)
         if (!c || !canSeeContact(user, c)) throw new Error('Contact not found')
-        // RLS denial deletes 0 rows without an error, so check what came back.
-        if (!ok(await supabase.from('contacts').delete().eq('id', id).select('id'))?.length)
-          throw new Error('You can only delete contacts you added that have no leads owned by someone else')
+        // Optimistically remove from memory
+        db.contacts = db.contacts.filter(contact => contact.id !== id)
+        writeHooks.after()
+        try {
+          // RLS denial deletes 0 rows without an error, so check what came back.
+          if (!ok(await supabase.from('contacts').delete().eq('id', id).select('id'))?.length)
+            throw new Error('You can only delete contacts you added that have no leads owned by someone else')
+        } catch (err) {
+          db.contacts.unshift(c)
+          writeHooks.after()
+          throw err
+        }
       }),
   })
 }
@@ -81,9 +90,17 @@ export function useSaveContact() {
         if (id) {
           const existing = db.contacts.find(c => c.id === id)
           if (!existing || !canSeeContact(user, existing)) throw new Error('Contact not found')
-          return ok(await supabase.from('contacts').update(patch).eq('id', id).select().single()) as Contact
+          const updated = ok(await supabase.from('contacts').update(patch).eq('id', id).select().single()) as Contact
+          const idx = db.contacts.findIndex(c => c.id === id)
+          if (idx !== -1) db.contacts[idx] = updated
+          else db.contacts.unshift(updated)
+          writeHooks.after()
+          return updated
         }
-        return ok(await supabase.from('contacts').insert({ ...patch, created_by: user.id }).select().single()) as Contact
+        const created = ok(await supabase.from('contacts').insert({ ...patch, created_by: user.id }).select().single()) as Contact
+        db.contacts.unshift(created)
+        writeHooks.after()
+        return created
       }),
   })
 }

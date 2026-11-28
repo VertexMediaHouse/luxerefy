@@ -51,7 +51,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
       setReady(true)
     }
-    supabase.auth.getSession().then(({ data }) => sync(data.session?.user.id ?? null))
+    supabase.auth.getSession().then(async ({ data, error }) => {
+      // A stale saved session (revoked, password changed, user deleted) makes the token refresh 400.
+      // Drop it locally so the next load starts clean at the login screen instead of retrying it.
+      if (error) await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+      void sync(error ? null : data.session?.user.id ?? null)
+    })
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) void sync(session.user.id)
       else { qc.clear(); void sync(null) }

@@ -91,5 +91,10 @@ html[data-eye="warm"]::after {
    and the page blurs while a screenshot key is pressed. */
 html[data-guard] body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 html[data-guard] input, html[data-guard] textarea, html[data-guard] [contenteditable] { -webkit-user-select: text; user-select: text; }
-html[data-guard="hidden"] #root { filter: blur(24px); }
+html[data-guard="hidden"] #root {
+  filter: blur(28px);
+  opacity: 0.08;
+  pointer-events: none;
+  user-select: none;
+}
 @media print { html[data-guard] body { display: none !important; } }

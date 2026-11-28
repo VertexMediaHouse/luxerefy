@@ -1,3 +1,4 @@
+import { askingPrice, propertyFacts } from '../../lib/format'
 import { useState } from 'react'
 import { Check, Copy, ExternalLink, MessageSquare } from 'lucide-react'
 import { Button, Modal } from '../../components/ui'
@@ -82,7 +83,7 @@ export function ShareCatalogueModal({ open, onClose, properties }: ShareCatalogu
                   />
                   <div>
                     <p className="text-xs font-semibold text-slate-900">{p.title}</p>
-                    <p className="text-[11px] text-slate-500">{p.locality} · {p.config} · ₹{(p.price / 1e7).toFixed(2)} Cr</p>
+                    <p className="text-[11px] text-slate-500">{[propertyFacts({ ...p, area_sqft: 0 }), askingPrice(p.price)].filter(Boolean).join(" · ")}</p>
                   </div>
                 </div>
                 <a

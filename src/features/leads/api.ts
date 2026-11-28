@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { captureRemote, db, ok, respond, write, writeHooks } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
-import { canSeeLead, findClash, isLost, isOpen, isWon, uid, type CaptureInput } from '../../lib/rules'
+import { canSeeLead, findClash, isManager, isLost, isOpen, isWon, uid, type CaptureInput } from '../../lib/rules'
 import { useUser } from '../../lib/session'
 import { stage, stageLabel } from '../../lib/stages'
 import { dateTime } from '../../lib/format'
@@ -218,10 +218,21 @@ export function useDeleteLead() {
   return useMutation({
     mutationFn: (id: string) =>
       write(async () => {
+        if (!isManager(user)) throw new Error('Only owners and managers can delete leads.')
         const l = ownLead(user, id)
-        // activities, tasks, documents and tickets all hang off leads with on delete cascade / set null.
-        ok(await supabase.from('leads').delete().eq('id', id))
-        return l
+        // Optimistically remove from in-memory mirror immediately (0ms visual latency)
+        db.leads = db.leads.filter(lead => lead.id !== id)
+        writeHooks.after()
+        try {
+          // activities, tasks, documents and tickets all hang off leads with on delete cascade / set null.
+          ok(await supabase.from('leads').delete().eq('id', id))
+          return l
+        } catch (err) {
+          // Rollback on network failure
+          db.leads.unshift(l)
+          writeHooks.after()
+          throw err
+        }
       }),
   })
 }
@@ -231,8 +242,20 @@ export function useDeleteLeads() {
   return useMutation({
     mutationFn: (ids: string[]) =>
       write(async () => {
+        if (!isManager(user)) throw new Error('Only owners and managers can delete leads.')
         ids.forEach(id => ownLead(user, id)) // permission check every lead before deleting any
-        ok(await supabase.from('leads').delete().in('id', ids))
+        const removed = db.leads.filter(l => ids.includes(l.id))
+        // Optimistically remove all from in-memory mirror immediately
+        db.leads = db.leads.filter(l => !ids.includes(l.id))
+        writeHooks.after()
+        try {
+          ok(await supabase.from('leads').delete().in('id', ids))
+        } catch (err) {
+          // Rollback on failure
+          db.leads.push(...removed)
+          writeHooks.after()
+          throw err
+        }
       }),
   })
 }

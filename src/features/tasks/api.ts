@@ -1,5 +1,5 @@
-﻿import { useMutation, useQuery } from '@tanstack/react-query'
-import { db, ok, respond, write } from '../../lib/db'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { db, ok, respond, write, writeHooks } from '../../lib/db'
 import { supabase } from '../../lib/supabase'
 import { canSeeLead, canSeeTask, findClash, isManager, uid } from '../../lib/rules'
 import { useUser } from '../../lib/session'
@@ -66,16 +66,26 @@ export function useSaveTask() {
           assigned_to: isManager(user) ? input.assigned_to : user.id, // RLS with-check: agents only schedule themselves
         }
         const clash = findClash(db, task)
-        if (clash) throw new Error(`That slot is already booked â€” "${clash.title}" at ${dateTime(clash.due_at)}. Pick another time.`)
+        if (clash) throw new Error(`That slot is already booked — "${clash.title}" at ${dateTime(clash.due_at)}. Pick another time.`)
+        
+        // Optimistically insert/update in memory
+        if (existing) {
+          const idx = db.tasks.findIndex(t => t.id === task.id)
+          if (idx !== -1) db.tasks[idx] = task
+        } else {
+          db.tasks.unshift(task)
+        }
+        writeHooks.after()
+
         if (existing) {
           const { id: _id, created_at, created_by, ...patch } = task
           ok(await supabase.from('tasks').update(patch).eq('id', task.id))
           // A move is worth recording on the lead, so the timeline explains the new date.
           if (was && (was.due_at !== task.due_at || was.ends_at !== task.ends_at) && task.lead_id)
-            await logRemote(task.lead_id, `Rescheduled: ${task.title} â€” ${dateTime(was.due_at)} â†’ ${dateTime(task.due_at)}`, user.id)
+            await logRemote(task.lead_id, `Rescheduled: ${task.title} — ${dateTime(was.due_at)} → ${dateTime(task.due_at)}`, user.id)
         } else {
           ok(await supabase.from('tasks').insert(task))
-          if (task.lead_id) await logRemote(task.lead_id, `Scheduled: ${task.title} â€” ${dateTime(task.due_at)}`, user.id)
+          if (task.lead_id) await logRemote(task.lead_id, `Scheduled: ${task.title} — ${dateTime(task.due_at)}`, user.id)
         }
         return task
       }),
@@ -89,9 +99,18 @@ export function useDeleteTask() {
       write(async () => {
         const t = db.tasks.find(t => t.id === id)
         if (!t || !canSeeTask(user, t)) throw new Error('Task not found')
-        // RLS denial deletes 0 rows without an error, so check what came back.
-        if (!ok(await supabase.from('tasks').delete().eq('id', id).select('id'))?.length)
-          throw new Error('You do not have permission to delete this task')
+        // Optimistically remove from memory
+        db.tasks = db.tasks.filter(task => task.id !== id)
+        writeHooks.after()
+        try {
+          // RLS denial deletes 0 rows without an error, so check what came back.
+          if (!ok(await supabase.from('tasks').delete().eq('id', id).select('id'))?.length)
+            throw new Error('You do not have permission to delete this task')
+        } catch (err) {
+          db.tasks.unshift(t)
+          writeHooks.after()
+          throw err
+        }
       }),
   })
 }
@@ -106,8 +125,19 @@ export function useSetTaskStatus() {
         // Reopening a slot re-checks the overlap guard.
         const clash = status !== 'cancelled' && findClash(db, { ...t, status })
         if (clash) throw new Error(`Reopening this clashes with "${clash.title}". Move one of them first.`)
-        ok(await supabase.from('tasks').update({ status }).eq('id', id))
-        if (t.lead_id && status === 'done') await logRemote(t.lead_id, `Completed: ${t.title}`, user.id)
+        
+        // Optimistically update in memory (instant checkmark toggle)
+        const prevStatus = t.status
+        t.status = status
+        writeHooks.after()
+        try {
+          ok(await supabase.from('tasks').update({ status }).eq('id', id))
+          if (t.lead_id && status === 'done') await logRemote(t.lead_id, `Completed: ${t.title}`, user.id)
+        } catch (err) {
+          t.status = prevStatus
+          writeHooks.after()
+          throw err
+        }
       }),
   })
 }

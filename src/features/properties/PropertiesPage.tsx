@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { Building2, Check, Download, ExternalLink, ImageOff, Link2, Plus, Share2, Upload } from 'lucide-react'
 import { Badge, Button, buttonCls, Card, Empty, Loading, PageHeader, SearchBox, Segmented, Tabs, inlineInputCls } from '../../components/ui'
 import { CATEGORIES, CATEGORY_LABEL, PROPERTY_STATUS_LABEL, PROPERTY_STATUS_TONE, SEGMENTS, SEGMENT_LABEL } from '../../lib/labels'
-import { inr } from '../../lib/format'
+import { askingPrice, propertyFacts } from '../../lib/format'
 import type { Property, PropertyCategory, PropertySegment, PropertyStatus } from '../../lib/types'
 import { shareUrl, useProperties } from './api'
 import { ImportPropertiesModal } from './ImportPropertiesModal'
@@ -134,9 +134,9 @@ export function PropertyCard({ p }: { p: Property }) {
         <div className="px-4 py-3">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="min-w-0 truncate text-sm font-semibold text-slate-900">{p.title}</h3>
-            <p className="shrink-0 text-sm font-semibold text-slate-900">{inr(p.price)}</p>
+            <p className="shrink-0 text-sm font-semibold text-slate-900">{askingPrice(p.price)}</p>
           </div>
-          <p className="mt-0.5 truncate text-xs text-slate-500">{p.locality} · {p.config} · {p.area_sqft.toLocaleString('en-IN')} sq ft</p>
+          <p className="mt-0.5 truncate text-xs text-slate-500">{propertyFacts(p)}</p>
           <p className="mt-0.5 text-xs text-slate-400">{CATEGORY_LABEL[p.category]}</p>
         </div>
       </Link>

@@ -8,10 +8,18 @@ import { useImportLeads } from './api'
 import { useUser } from '../../lib/session'
 import { isManager } from '../../lib/rules'
 import { usePipelines } from '../pipeline/api'
+import { db } from '../../lib/db'
 
 /** A sheet is read in the browser, so cap it rather than freezing the tab on a 50k-row export. */
 const MAX_ROWS = 2000
 const PREVIEW = 8
+
+/** The sheet's "Assigned to" cell is a rep's name, email or id; the column is a profiles uuid. Unknown -> unassigned. */
+function assignee(v: string | null | undefined): string | null {
+  const s = v?.trim().toLowerCase()
+  if (!s) return null
+  return db.profiles.find(p => p.active && (p.id === v || p.full_name.toLowerCase() === s || p.email?.toLowerCase() === s))?.id ?? null
+}
 
 const COLUMNS: [SheetField, string][] = [
   ['name', 'Name'], ['phone', 'Phone'], ['email', 'Email'], ['city', 'City'],
@@ -177,7 +185,7 @@ export function ImportLeadsModal({ open, onClose }: { open: boolean; onClose: ()
             <Button variant="secondary" onClick={close}>Cancel</Button>
             <Button
               disabled={!valid.length || imp.isPending}
-              onClick={() => imp.mutate(valid.map(r => (isManager(user) || r.input!.assigned_to ? r.input! : { ...r.input!, assigned_to: user.id })))}
+              onClick={() => imp.mutate(valid.map(r => ({ ...r.input!, assigned_to: isManager(user) ? assignee(r.input!.assigned_to) : user.id })))}
             >
               {imp.isPending ? <><Loader2 className="size-4 animate-spin" /> Importing…</> : <>Import {valid.length} {valid.length === 1 ? 'lead' : 'leads'}</>}
             </Button>

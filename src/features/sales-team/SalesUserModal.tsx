@@ -186,8 +186,8 @@ export function SalesUserModal({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" disabled={busy}>
-            {busy ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Sales User'}
+          <Button type="submit" loading={busy}>
+            {isEditing ? 'Save Changes' : 'Create Sales User'}
           </Button>
         </div>
       </form>
